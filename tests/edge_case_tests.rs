@@ -3,7 +3,7 @@
 //! Tests for unusual, malformed, or boundary condition inputs.
 
 use sdfrust::{
-    parse_sdf_string, write_sdf_string, Atom, Bond, BondOrder, BondStereo, Molecule, SdfError,
+    parse_sdf_string, write_sdf_string, Atom, Bond, BondOrder, BondStereo, Molecule,
 };
 
 // ============================================================================
@@ -508,7 +508,7 @@ M  END
 
 #[test]
 fn test_roundtrip_empty_molecule() {
-    let mut mol = Molecule::new("empty");
+    let mol = Molecule::new("empty");
     let sdf = write_sdf_string(&mol).unwrap();
     let parsed = parse_sdf_string(&sdf).unwrap();
     assert_eq!(parsed.name, mol.name);

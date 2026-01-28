@@ -19,7 +19,8 @@ src/
 ├── molecule.rs         # Molecule container + methods
 ├── parser/
 │   ├── mod.rs          # Parser exports
-│   └── sdf.rs          # SDF V2000 parser + iterator
+│   ├── sdf.rs          # SDF V2000 parser + iterator
+│   └── mol2.rs         # TRIPOS MOL2 parser + iterator
 └── writer/
     ├── mod.rs          # Writer exports
     └── sdf.rs          # SDF V2000 writer
@@ -31,8 +32,10 @@ src/
 - `Atom`: Represents an atom with 3D coordinates, element, charge
 - `Bond`: Connects two atoms with order (single/double/triple/aromatic) and stereo
 - `BondOrder`: Enum for bond types (1-8 as per SDF spec)
-- `SdfParser<R>`: Streaming parser from any `BufRead`
-- `SdfIterator<R>`: Iterator over molecules in multi-molecule files
+- `SdfParser<R>`: Streaming SDF parser from any `BufRead`
+- `SdfIterator<R>`: Iterator over molecules in multi-molecule SDF files
+- `Mol2Parser<R>`: Streaming MOL2 parser from any `BufRead`
+- `Mol2Iterator<R>`: Iterator over molecules in multi-molecule MOL2 files
 
 ### Design Patterns
 
@@ -55,8 +58,10 @@ cargo clippy          # Run linter
 
 ```
 tests/
-├── sdf_parsing_tests.rs   # 32 unit tests for basic functionality
+├── sdf_parsing_tests.rs   # 32 unit tests for basic SDF functionality
 ├── pubchem_tests.rs       # 27 tests with real PubChem molecules
+├── edge_case_tests.rs     # 41 edge case tests
+├── mol2_tests.rs          # 17 MOL2 integration tests
 └── test_data/
     ├── aspirin.sdf        # PubChem CID 2244
     ├── caffeine.sdf       # Hand-written test file
@@ -64,8 +69,12 @@ tests/
     ├── glucose.sdf        # PubChem CID 5988 (sucrose)
     ├── galactose.sdf      # PubChem CID 5793
     ├── acetaminophen.sdf  # PubChem CID 1983
-    └── methionine.sdf     # PubChem CID 6137
+    ├── methionine.sdf     # PubChem CID 6137
+    ├── methane.mol2       # Simple MOL2 test file
+    └── benzene.mol2       # Aromatic MOL2 test file
 ```
+
+Total: 129 tests (target was 100+)
 
 ## SDF Format Reference
 
@@ -131,8 +140,32 @@ cargo test -- --test-threads=1 # Sequential execution
 - **chemcore**: Another Rust cheminformatics library (proof-of-concept)
 - **rdkit-rs**: RDKit bindings (requires C++)
 
+## MOL2 Format Reference
+
+### Structure
+```
+@<TRIPOS>MOLECULE         <- Section header
+molecule_name             <- Molecule name
+num_atoms num_bonds ...   <- Counts line
+mol_type                  <- SMALL, BIOPOLYMER, etc.
+charge_type               <- NO_CHARGES, USER_CHARGES, etc.
+
+@<TRIPOS>ATOM             <- Atom section
+atom_id name x y z type [subst_id subst_name charge]
+
+@<TRIPOS>BOND             <- Bond section
+bond_id atom1 atom2 type  <- type: 1, 2, 3, ar, am
+```
+
+### Key Parsing Details
+
+1. **Section Headers**: Start with `@<TRIPOS>`
+2. **Atom Types**: SYBYL types like "C.ar", "N.pl3" - element extracted before "."
+3. **Bond Types**: "1" (single), "2" (double), "3" (triple), "ar" (aromatic)
+4. **Atom Indices**: 1-based in file, converted to 0-based internally
+
 ## Roadmap
 
 See [ROADMAP.md](ROADMAP.md) for detailed development phases.
 
-Current status: Phase 3 (Comprehensive Testing) in progress.
+Current status: Phase 4 (MOL2 Parser) complete. Next: Phase 5 (SDF V3000).

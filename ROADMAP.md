@@ -50,7 +50,7 @@ This document outlines the development phases for sdfrust, a pure-Rust library f
 - [ ] Comparison with RDKit/OpenBabel output (deferred)
 
 ### Test Coverage Achieved
-- [x] 106 test cases (target was 100+)
+- [x] 129 test cases (target was 100+)
 - [x] Real-world files from PubChem
 - [x] Edge cases: empty molecules, large coordinates, charges, stereo, multi-molecule
 
@@ -62,23 +62,32 @@ This document outlines the development phases for sdfrust, a pure-Rust library f
 
 ---
 
-## Phase 4: MOL2 Parser
+## Phase 4: MOL2 Parser ✅ COMPLETE
 
-**Status:** Planned
+**Status:** Implemented and tested
 
 ### Deliverables
-- [ ] Parse TRIPOS MOL2 format
-  - [ ] @<TRIPOS>MOLECULE record
-  - [ ] @<TRIPOS>ATOM record
-  - [ ] @<TRIPOS>BOND record
-  - [ ] @<TRIPOS>SUBSTRUCTURE record (optional)
-- [ ] Map to same `Molecule` structure
-- [ ] MOL2-specific fields (atom types, partial charges)
-- [ ] Multi-molecule MOL2 files
+- [x] Parse TRIPOS MOL2 format
+  - [x] @<TRIPOS>MOLECULE record
+  - [x] @<TRIPOS>ATOM record
+  - [x] @<TRIPOS>BOND record
+  - [x] @<TRIPOS>SUBSTRUCTURE record (skipped, optional)
+  - [x] @<TRIPOS>COMMENT record (skipped, optional)
+- [x] Map to same `Molecule` structure
+- [x] Partial charges converted to formal charges (rounded)
+- [x] Multi-molecule MOL2 files
+- [x] Memory-efficient iterator for large files
 
-### Data Model Extensions
-- [ ] `atom_type: Option<String>` for SYBYL atom types
-- [ ] `partial_charge: Option<f64>` for MOL2 charges
+### Test Coverage
+- [x] 6 unit tests in parser module
+- [x] 17 integration tests with real MOL2 files
+- [x] Bond types: single, double, triple, aromatic
+- [x] Edge cases: charged molecules, extra sections, atom types
+
+### Data Model Notes
+- SYBYL atom types (e.g., "C.ar", "N.pl3") parsed to extract element
+- Partial charges rounded to formal charges
+- Future: add `atom_type: Option<String>` and `partial_charge: Option<f64>` if needed
 
 ---
 
