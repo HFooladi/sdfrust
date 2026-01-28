@@ -1,0 +1,17 @@
+[package]
+name = "sdfrust"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+authors = ["Hosein Fooladi"]
+description = "A fast, pure-Rust parser for SDF and MOL2 chemical structure files"
+license = "MIT"
+repository = "https://github.com/hfooladi/sdfrust"
+keywords = ["chemistry", "sdf", "mol2", "cheminformatics", "parsing"]
+categories = ["science", "parser-implementations"]
+
+[dependencies]
+thiserror = "2.0"
+
+[dev-dependencies]
+tempfile = "3.14"

@@ -1,0 +1,216 @@
+# sdfrust Roadmap
+
+This document outlines the development phases for sdfrust, a pure-Rust library for parsing chemical structure files.
+
+## Phase 1: SDF V2000 Parser (Core) ✅ COMPLETE
+
+**Status:** Implemented and tested
+
+### Deliverables
+- [x] Parse SDF V2000 atom block (coordinates, element, charge, mass diff)
+- [x] Parse SDF V2000 bond block (atom indices, bond order, stereo)
+- [x] Parse properties block (key-value pairs after M END)
+- [x] Handle multi-molecule files ($$$$-delimited)
+- [x] M CHG lines (formal charges)
+- [x] M ISO lines (isotopes)
+- [x] Basic validation and error handling
+- [x] Memory-efficient iterator for large files
+
+### Data Model
+- [x] `Molecule` struct with atoms, bonds, properties
+- [x] `Atom` struct with coordinates, element, charge
+- [x] `Bond` struct with order and stereochemistry
+- [x] `BondOrder` enum (Single, Double, Triple, Aromatic, etc.)
+- [x] `BondStereo` enum (None, Up, Down, Either)
+
+---
+
+## Phase 2: SDF V2000 Writer ✅ COMPLETE
+
+**Status:** Implemented and tested
+
+### Deliverables
+- [x] Write SDF V2000 format
+- [x] Preserve properties on round-trip
+- [x] Write M CHG/M ISO lines for special atoms
+- [x] Multi-molecule file output
+
+---
+
+## Phase 3: Comprehensive Testing & Validation 🔄 IN PROGRESS
+
+**Status:** In progress
+
+### Deliverables
+- [x] Unit tests for parsing/writing
+- [ ] Real-world file tests (PubChem, ChEMBL samples)
+- [ ] Edge case tests (empty molecules, large files, special characters)
+- [ ] Round-trip validation suite
+- [ ] Performance benchmarks
+- [ ] Comparison with RDKit/OpenBabel output
+
+### Test Coverage Targets
+- [ ] 90%+ code coverage
+- [ ] 100+ test cases
+- [ ] Real-world files from multiple sources
+
+---
+
+## Phase 4: MOL2 Parser
+
+**Status:** Planned
+
+### Deliverables
+- [ ] Parse TRIPOS MOL2 format
+  - [ ] @<TRIPOS>MOLECULE record
+  - [ ] @<TRIPOS>ATOM record
+  - [ ] @<TRIPOS>BOND record
+  - [ ] @<TRIPOS>SUBSTRUCTURE record (optional)
+- [ ] Map to same `Molecule` structure
+- [ ] MOL2-specific fields (atom types, partial charges)
+- [ ] Multi-molecule MOL2 files
+
+### Data Model Extensions
+- [ ] `atom_type: Option<String>` for SYBYL atom types
+- [ ] `partial_charge: Option<f64>` for MOL2 charges
+
+---
+
+## Phase 5: SDF V3000 Parser
+
+**Status:** Planned
+
+### Deliverables
+- [ ] Parse V3000 counts line (M V30 BEGIN CTAB)
+- [ ] Parse V3000 atom block (M V30 BEGIN ATOM)
+- [ ] Parse V3000 bond block (M V30 BEGIN BOND)
+- [ ] Handle extended features:
+  - [ ] Atom lists
+  - [ ] R-group labels
+  - [ ] Enhanced stereochemistry
+  - [ ] Atom-to-atom mapping
+- [ ] V3000 writer
+
+---
+
+## Phase 6: Format Auto-Detection
+
+**Status:** Planned
+
+### Deliverables
+- [ ] Detect format from file extension (.sdf, .mol, .mol2)
+- [ ] Detect format from file content (header patterns)
+- [ ] Unified `parse_molecule_file()` function
+- [ ] Gzip support (transparent decompression)
+
+---
+
+## Phase 7: Basic Descriptors
+
+**Status:** Planned
+
+### Deliverables
+- [ ] Molecular weight calculation
+- [ ] Exact mass calculation
+- [ ] Atom count by element
+- [ ] Bond count by type
+- [ ] Heavy atom count
+- [ ] Rotatable bond count (basic)
+- [ ] Ring detection (basic)
+
+---
+
+## Phase 8: Python Bindings
+
+**Status:** Planned
+
+### Deliverables
+- [ ] PyO3 module setup
+- [ ] `PyMolecule` wrapper class
+- [ ] File I/O bindings
+- [ ] NumPy array support for coordinates
+- [ ] Iterator support for large files
+- [ ] Maturin build configuration
+- [ ] PyPI package publication
+
+---
+
+## Phase 9: Shared Traits (mol-core)
+
+**Status:** Planned
+
+### Deliverables
+- [ ] Create `mol-core` crate with trait definitions
+- [ ] `MolecularStructure` trait
+- [ ] `AtomLike` trait
+- [ ] `BondLike` trait
+- [ ] Update sdfrust to implement traits
+- [ ] Update pdbrust to implement traits
+- [ ] Enable cross-format operations
+
+---
+
+## Phase 10: Advanced Features
+
+**Status:** Future
+
+### Potential Features
+- [ ] SMILES parsing/generation
+- [ ] InChI generation
+- [ ] Substructure search
+- [ ] Fingerprint generation (ECFP, MACCS)
+- [ ] 2D coordinate generation
+- [ ] Stereochemistry perception
+- [ ] Aromaticity perception
+- [ ] Hydrogen addition/removal
+
+---
+
+## Quality Standards
+
+Following pdbrust conventions:
+
+### Code Quality
+- Comprehensive error handling with `thiserror`
+- Zero unsafe code
+- Clippy clean (`-D warnings`)
+- Rustfmt formatted
+- Documentation for all public items
+
+### Testing
+- Unit tests for all modules
+- Integration tests with real files
+- Property-based tests where applicable
+- Performance benchmarks
+- CI/CD with GitHub Actions
+
+### Documentation
+- README with examples
+- Inline documentation
+- CHANGELOG maintenance
+- CLAUDE.md for AI assistance
+
+---
+
+## Version Milestones
+
+| Version | Phases | Description |
+|---------|--------|-------------|
+| 0.1.0   | 1-2    | SDF V2000 read/write |
+| 0.2.0   | 3      | Comprehensive testing |
+| 0.3.0   | 4      | MOL2 support |
+| 0.4.0   | 5-6    | SDF V3000, auto-detection |
+| 0.5.0   | 7      | Basic descriptors |
+| 0.6.0   | 8      | Python bindings |
+| 1.0.0   | 9-10   | Stable API, advanced features |
+
+---
+
+## Contributing
+
+Each phase should include:
+1. Implementation
+2. Unit tests
+3. Integration tests
+4. Documentation updates
+5. CHANGELOG entry
