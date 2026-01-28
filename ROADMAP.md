@@ -91,7 +91,63 @@ This document outlines the development phases for sdfrust, a pure-Rust library f
 
 ---
 
-## Phase 5: SDF V3000 Parser
+## Phase 5: Performance Benchmarking & Comparison
+
+**Status:** Planned
+
+**Motivation:** One of the primary reasons for implementing in Rust is performance. This must be validated with rigorous comparisons against established tools.
+
+### Deliverables
+- [ ] Create comprehensive benchmark suite (`benches/` directory)
+- [ ] Benchmark against Python/RDKit
+  - [ ] Parse 10K, 100K, 1M molecule SDF files
+  - [ ] Measure memory usage
+  - [ ] Compare feature extraction speed
+- [ ] Benchmark against OpenBabel (C++)
+  - [ ] Fair comparison using CLI or bindings
+- [ ] Benchmark against pure Python implementations
+  - [ ] Simple line-by-line parser
+  - [ ] Show Rust advantage clearly
+- [ ] Document results in README with charts/tables
+- [ ] Automated benchmark CI (track regressions)
+
+### Benchmark Datasets
+- [ ] ChEMBL subset (1M molecules)
+- [ ] PubChem subset (diverse sizes)
+- [ ] Synthetic stress tests (large molecules, many properties)
+
+### Metrics to Compare
+| Metric | Description |
+|--------|-------------|
+| Parse throughput | Molecules/second |
+| Memory peak | Maximum RSS during parsing |
+| Memory per molecule | Bytes per loaded molecule |
+| Round-trip speed | Parse + write cycle |
+| Cold start | First molecule latency |
+| Streaming efficiency | Memory for iterator vs load-all |
+
+### Expected Results (Hypothesis)
+- 10-100x faster than pure Python
+- 2-10x faster than RDKit Python bindings
+- Comparable to OpenBabel C++ (within 2x)
+- 5-10x lower memory usage than Python
+
+### Benchmark Script Structure
+```
+benches/
+├── sdf_parse_benchmark.rs    # Criterion benchmarks
+├── comparison/
+│   ├── benchmark_rdkit.py    # RDKit comparison
+│   ├── benchmark_openbabel.py # OpenBabel comparison
+│   ├── benchmark_pure_python.py # Pure Python baseline
+│   └── run_all.sh            # Run all and generate report
+└── data/
+    └── README.md             # How to obtain test datasets
+```
+
+---
+
+## Phase 6: SDF V3000 Parser
 
 **Status:** Planned
 
@@ -108,7 +164,7 @@ This document outlines the development phases for sdfrust, a pure-Rust library f
 
 ---
 
-## Phase 6: Format Auto-Detection
+## Phase 7: Format Auto-Detection
 
 **Status:** Planned
 
@@ -120,7 +176,7 @@ This document outlines the development phases for sdfrust, a pure-Rust library f
 
 ---
 
-## Phase 7: Basic Descriptors
+## Phase 8: Basic Descriptors
 
 **Status:** Planned
 
@@ -135,7 +191,7 @@ This document outlines the development phases for sdfrust, a pure-Rust library f
 
 ---
 
-## Phase 8: Python Bindings
+## Phase 9: Python Bindings
 
 **Status:** Planned
 
@@ -150,7 +206,7 @@ This document outlines the development phases for sdfrust, a pure-Rust library f
 
 ---
 
-## Phase 9: Shared Traits (mol-core)
+## Phase 10: Shared Traits (mol-core)
 
 **Status:** Planned
 
@@ -165,7 +221,7 @@ This document outlines the development phases for sdfrust, a pure-Rust library f
 
 ---
 
-## Phase 10: Advanced Features
+## Phase 11: Advanced Features
 
 **Status:** Future
 
@@ -214,10 +270,11 @@ Following pdbrust conventions:
 | 0.1.0   | 1-2    | SDF V2000 read/write |
 | 0.2.0   | 3      | Comprehensive testing |
 | 0.3.0   | 4      | MOL2 support |
-| 0.4.0   | 5-6    | SDF V3000, auto-detection |
-| 0.5.0   | 7      | Basic descriptors |
-| 0.6.0   | 8      | Python bindings |
-| 1.0.0   | 9-10   | Stable API, advanced features |
+| 0.4.0   | 5      | **Performance benchmarks vs Python/RDKit** |
+| 0.5.0   | 6-7    | SDF V3000, auto-detection |
+| 0.6.0   | 8      | Basic descriptors |
+| 0.7.0   | 9      | Python bindings |
+| 1.0.0   | 10-11  | Stable API, advanced features |
 
 ---
 
