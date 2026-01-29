@@ -5,7 +5,7 @@
 /// Collection types as defined in V3000 format.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum CollectionType {
-    /// Atom list (e.g., "NOT [C,N,O]" or "[C,N]").
+    /// Atom list (e.g., "NOT \[C,N,O\]" or "\[C,N\]").
     AtomList,
     /// R-group definition.
     RGroup,

@@ -604,7 +604,7 @@ fn test_parse_all_test_files() {
     ];
 
     for (file, expected) in &files {
-        let mol = parse_sdf_file(file).expect(&format!("Failed to parse {}", file));
+        let mol = parse_sdf_file(file).unwrap_or_else(|_| panic!("Failed to parse {}", file));
         validate_molecule(&mol, expected);
     }
 }
