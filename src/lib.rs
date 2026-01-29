@@ -114,6 +114,268 @@
 //! assert_eq!(mol.name, "water");
 //! assert_eq!(mol.formula(), "H2O");
 //! ```
+//!
+//! ## Error Handling
+//!
+//! All parsing functions return `Result<T, SdfError>`. The library provides specific
+//! error variants for different failure modes:
+//!
+//! ```rust
+//! use sdfrust::{parse_sdf_string, SdfError};
+//!
+//! let result = parse_sdf_string("invalid content");
+//! match result {
+//!     Ok(mol) => println!("Parsed: {}", mol.name),
+//!     Err(SdfError::EmptyFile) => println!("File was empty"),
+//!     Err(SdfError::Parse { line, message }) => {
+//!         println!("Parse error at line {}: {}", line, message);
+//!     }
+//!     Err(SdfError::InvalidCountsLine(s)) => {
+//!         println!("Bad counts line: {}", s);
+//!     }
+//!     Err(e) => println!("Other error: {}", e),
+//! }
+//! ```
+//!
+//! ### Common Error Types
+//!
+//! - `SdfError::Io` - File I/O errors (file not found, permission denied)
+//! - `SdfError::Parse` - General parse errors with line number
+//! - `SdfError::EmptyFile` - The file contains no data
+//! - `SdfError::AtomCountMismatch` - Declared atom count doesn't match actual atoms
+//! - `SdfError::BondCountMismatch` - Declared bond count doesn't match actual bonds
+//! - `SdfError::InvalidAtomIndex` - Bond references non-existent atom
+//! - `SdfError::InvalidBondOrder` - Unrecognized bond type
+//! - `SdfError::InvalidCountsLine` - Malformed counts line in header
+//! - `SdfError::MissingSection` - Required section not found (MOL2)
+//!
+//! ### Handling Multi-Molecule Files with Errors
+//!
+//! When iterating, each molecule is parsed independently:
+//!
+//! ```rust,ignore
+//! use sdfrust::iter_sdf_file;
+//!
+//! let mut success_count = 0;
+//! let mut error_count = 0;
+//!
+//! for result in iter_sdf_file("database.sdf")? {
+//!     match result {
+//!         Ok(mol) => success_count += 1,
+//!         Err(e) => {
+//!             eprintln!("Skipping molecule: {}", e);
+//!             error_count += 1;
+//!         }
+//!     }
+//! }
+//! println!("Parsed {} molecules, {} errors", success_count, error_count);
+//! ```
+//!
+//! ## Working with Properties
+//!
+//! SDF files can contain key-value properties in the data block. These are
+//! stored as a `HashMap<String, String>` on the molecule.
+//!
+//! ### Getting Properties
+//!
+//! ```rust
+//! use sdfrust::parse_sdf_string;
+//!
+//! let sdf = r#"aspirin
+//!
+//!
+//!   1  0  0  0  0  0  0  0  0  0999 V2000
+//!     0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+//! M  END
+//! > <PUBCHEM_CID>
+//! 2244
+//!
+//! > <MOLECULAR_WEIGHT>
+//! 180.16
+//!
+//! $$$$
+//! "#;
+//!
+//! let mol = parse_sdf_string(sdf).unwrap();
+//!
+//! // Get a single property
+//! if let Some(cid) = mol.get_property("PUBCHEM_CID") {
+//!     assert_eq!(cid, "2244");
+//! }
+//!
+//! // Check if property exists
+//! assert!(mol.properties.contains_key("MOLECULAR_WEIGHT"));
+//! ```
+//!
+//! ### Setting Properties
+//!
+//! ```rust
+//! use sdfrust::Molecule;
+//!
+//! let mut mol = Molecule::new("example");
+//! mol.set_property("SMILES", "CCO");
+//! mol.set_property("SOURCE", "generated");
+//!
+//! assert_eq!(mol.get_property("SMILES"), Some("CCO"));
+//! ```
+//!
+//! ### Iterating Over Properties
+//!
+//! ```rust
+//! use sdfrust::Molecule;
+//!
+//! let mut mol = Molecule::new("example");
+//! mol.set_property("MW", "180.16");
+//! mol.set_property("CID", "2244");
+//!
+//! for (key, value) in &mol.properties {
+//!     println!("{}: {}", key, value);
+//! }
+//! ```
+//!
+//! ## Molecule Operations
+//!
+//! The `Molecule` struct provides many useful methods for working with
+//! chemical structure data.
+//!
+//! ### Molecular Formula
+//!
+//! ```rust
+//! use sdfrust::parse_sdf_string;
+//!
+//! let sdf = r#"water
+//!
+//!
+//!   3  2  0  0  0  0  0  0  0  0999 V2000
+//!     0.0000    0.0000    0.0000 O   0  0  0  0  0  0  0  0  0  0  0  0
+//!     0.9572    0.0000    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+//!    -0.2400    0.9266    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+//!   1  2  1  0  0  0  0
+//!   1  3  1  0  0  0  0
+//! M  END
+//! $$$$
+//! "#;
+//!
+//! let mol = parse_sdf_string(sdf).unwrap();
+//! assert_eq!(mol.formula(), "H2O");
+//! ```
+//!
+//! ### Geometric Center (Centroid)
+//!
+//! ```rust
+//! use sdfrust::{Molecule, Atom};
+//!
+//! let mut mol = Molecule::new("example");
+//! mol.atoms.push(Atom::new(0, "C", 0.0, 0.0, 0.0));
+//! mol.atoms.push(Atom::new(1, "C", 2.0, 0.0, 0.0));
+//!
+//! let (cx, cy, cz) = mol.centroid().unwrap();
+//! assert!((cx - 1.0).abs() < 1e-6);
+//! assert!((cy - 0.0).abs() < 1e-6);
+//! ```
+//!
+//! ### Bond Connectivity (Neighbors)
+//!
+//! ```rust
+//! use sdfrust::{Molecule, Atom, Bond, BondOrder};
+//!
+//! let mut mol = Molecule::new("methane");
+//! mol.atoms.push(Atom::new(0, "C", 0.0, 0.0, 0.0));
+//! mol.atoms.push(Atom::new(1, "H", 1.0, 0.0, 0.0));
+//! mol.atoms.push(Atom::new(2, "H", -1.0, 0.0, 0.0));
+//! mol.bonds.push(Bond::new(0, 1, BondOrder::Single));
+//! mol.bonds.push(Bond::new(0, 2, BondOrder::Single));
+//!
+//! // Get neighbors of the carbon (index 0)
+//! let neighbors = mol.neighbors(0);
+//! assert_eq!(neighbors.len(), 2);
+//! assert!(neighbors.contains(&1));
+//! assert!(neighbors.contains(&2));
+//! ```
+//!
+//! ### Element Counts
+//!
+//! ```rust
+//! use sdfrust::{Molecule, Atom};
+//!
+//! let mut mol = Molecule::new("ethanol");
+//! mol.atoms.push(Atom::new(0, "C", 0.0, 0.0, 0.0));
+//! mol.atoms.push(Atom::new(1, "C", 1.5, 0.0, 0.0));
+//! mol.atoms.push(Atom::new(2, "O", 2.5, 0.0, 0.0));
+//! mol.atoms.push(Atom::new(3, "H", 0.0, 1.0, 0.0));
+//!
+//! let counts = mol.element_counts();
+//! assert_eq!(counts.get("C"), Some(&2));
+//! assert_eq!(counts.get("O"), Some(&1));
+//! assert_eq!(counts.get("H"), Some(&1));
+//! ```
+//!
+//! ### Other Useful Methods
+//!
+//! - `atom_count()` / `bond_count()` - Get counts
+//! - `is_empty()` - Check if molecule has atoms
+//! - `total_charge()` - Sum of formal charges
+//! - `has_aromatic_bonds()` - Check for aromaticity
+//! - `has_charges()` - Check for charged atoms
+//! - `atoms_by_element("C")` - Filter atoms by element
+//! - `bonds_by_order(BondOrder::Double)` - Filter bonds by type
+//! - `translate(dx, dy, dz)` - Move molecule
+//! - `center()` - Move centroid to origin
+//!
+//! ## Performance Tips
+//!
+//! ### Use Iterators for Large Files
+//!
+//! For files with thousands of molecules, use the iterator API to process
+//! molecules one at a time without loading all into memory:
+//!
+//! ```rust,ignore
+//! use sdfrust::iter_sdf_file;
+//!
+//! // Memory efficient - processes one molecule at a time
+//! for result in iter_sdf_file("large_database.sdf")? {
+//!     let mol = result?;
+//!     // Process and discard
+//! }
+//!
+//! // vs. loading all at once (uses more memory)
+//! let all_molecules = parse_sdf_file_multi("large_database.sdf")?;
+//! ```
+//!
+//! ### Release Builds for Benchmarks
+//!
+//! Parsing performance improves significantly with optimizations:
+//!
+//! ```bash
+//! cargo build --release
+//! cargo run --release --example benchmark
+//! ```
+//!
+//! ### Streaming vs Load-All Tradeoffs
+//!
+//! | Approach | Memory | Speed | Use Case |
+//! |----------|--------|-------|----------|
+//! | `iter_sdf_file` | O(1) | Fast | Large files, filtering |
+//! | `parse_sdf_file_multi` | O(n) | Fast | Need random access |
+//! | `parse_sdf_string` | O(1) | Fastest | Single molecule |
+//!
+//! ## Format Notes
+//!
+//! ### Supported Formats
+//!
+//! - **SDF V2000**: Full support for reading and writing (up to 999 atoms/bonds)
+//! - **MOL2 TRIPOS**: Full support for reading (MOLECULE, ATOM, BOND sections)
+//!
+//! ### SDF V3000
+//!
+//! SDF V3000 (extended format for >999 atoms) is planned for a future release.
+//! See [ROADMAP.md](https://github.com/hfooladi/sdfrust) for development plans.
+//!
+//! ### Format Detection
+//!
+//! The library uses file content to determine format:
+//! - SDF files contain `V2000` in the counts line and end with `$$$$`
+//! - MOL2 files start with `@<TRIPOS>MOLECULE`
 
 pub mod atom;
 pub mod bond;
