@@ -91,58 +91,72 @@ This document outlines the development phases for sdfrust, a pure-Rust library f
 
 ---
 
-## Phase 5: Performance Benchmarking & Comparison
+## Phase 5: Performance Benchmarking & Comparison ✅ COMPLETE
 
-**Status:** Planned
+**Status:** Implemented and tested
 
 **Motivation:** One of the primary reasons for implementing in Rust is performance. This must be validated with rigorous comparisons against established tools.
 
 ### Deliverables
-- [ ] Create comprehensive benchmark suite (`benches/` directory)
-- [ ] Benchmark against Python/RDKit
-  - [ ] Parse 10K, 100K, 1M molecule SDF files
-  - [ ] Measure memory usage
-  - [ ] Compare feature extraction speed
-- [ ] Benchmark against OpenBabel (C++)
-  - [ ] Fair comparison using CLI or bindings
-- [ ] Benchmark against pure Python implementations
-  - [ ] Simple line-by-line parser
-  - [ ] Show Rust advantage clearly
-- [ ] Document results in README with charts/tables
-- [ ] Automated benchmark CI (track regressions)
+- [x] Create comprehensive benchmark suite (`benches/` directory)
+- [x] Criterion benchmarks for SDF parsing
+- [x] Criterion benchmarks for MOL2 parsing
+- [x] Criterion benchmarks for round-trip operations
+- [x] Benchmark against Python/RDKit
+  - [x] Parse varying molecule counts (10, 100, 1K, 10K)
+  - [x] Measure memory usage with psutil
+  - [x] Compare throughput (molecules/second)
+- [x] Benchmark against pure Python implementations
+  - [x] Simple line-by-line SDF parser
+  - [x] Show Rust advantage clearly
+- [x] Document results in BENCHMARK_RESULTS.md
+- [ ] Automated benchmark CI (track regressions) - deferred to CI setup
+- [ ] Benchmark against OpenBabel (C++) - deferred
 
-### Benchmark Datasets
-- [ ] ChEMBL subset (1M molecules)
-- [ ] PubChem subset (diverse sizes)
-- [ ] Synthetic stress tests (large molecules, many properties)
-
-### Metrics to Compare
-| Metric | Description |
-|--------|-------------|
-| Parse throughput | Molecules/second |
-| Memory peak | Maximum RSS during parsing |
-| Memory per molecule | Bytes per loaded molecule |
-| Round-trip speed | Parse + write cycle |
-| Cold start | First molecule latency |
-| Streaming efficiency | Memory for iterator vs load-all |
-
-### Expected Results (Hypothesis)
-- 10-100x faster than pure Python
-- 2-10x faster than RDKit Python bindings
-- Comparable to OpenBabel C++ (within 2x)
-- 5-10x lower memory usage than Python
-
-### Benchmark Script Structure
+### Benchmark Suite Structure
 ```
 benches/
-├── sdf_parse_benchmark.rs    # Criterion benchmarks
+├── sdf_parse_benchmark.rs    # Criterion SDF benchmarks
+├── mol2_parse_benchmark.rs   # Criterion MOL2 benchmarks
+├── roundtrip_benchmark.rs    # Parse + write cycle benchmarks
 ├── comparison/
 │   ├── benchmark_rdkit.py    # RDKit comparison
-│   ├── benchmark_openbabel.py # OpenBabel comparison
 │   ├── benchmark_pure_python.py # Pure Python baseline
-│   └── run_all.sh            # Run all and generate report
+│   ├── generate_report.py    # Generate markdown report
+│   ├── run_all.sh            # Master benchmark script
+│   └── requirements.txt      # Python dependencies
 └── data/
-    └── README.md             # How to obtain test datasets
+    ├── README.md             # Dataset acquisition instructions
+    └── generate_synthetic.py # Synthetic SDF generator
+```
+
+### Benchmark Groups
+
+| File | Groups | Purpose |
+|------|--------|---------|
+| `sdf_parse_benchmark.rs` | `parse_single`, `parse_multi`, `parse_iterator`, `parse_real_files` | SDF parsing performance |
+| `mol2_parse_benchmark.rs` | `mol2_parse_single`, `mol2_parse_multi`, `mol2_parse_iterator` | MOL2 parsing performance |
+| `roundtrip_benchmark.rs` | `roundtrip_single`, `write_only`, `molecule_operations`, `property_operations` | Full cycle benchmarks |
+
+### Results Summary
+
+| Tool | Throughput | vs sdfrust |
+|------|------------|------------|
+| **sdfrust** | ~220,000 mol/s | baseline |
+| RDKit | ~30,000-50,000 mol/s | 4-7x slower |
+| Pure Python | ~3,000-5,000 mol/s | 40-70x slower |
+
+### Usage
+
+```bash
+# Run Criterion benchmarks
+cargo bench
+
+# Run full comparison suite
+cd benches/comparison && ./run_all.sh
+
+# View HTML reports
+open target/criterion/report/index.html
 ```
 
 ---

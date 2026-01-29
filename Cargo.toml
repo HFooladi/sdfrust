@@ -15,3 +15,17 @@ thiserror = "2.0"
 
 [dev-dependencies]
 tempfile = "3.14"
+criterion = { version = "0.5", features = ["html_reports"] }
+rand = "0.8"
+
+[[bench]]
+name = "sdf_parse_benchmark"
+harness = false
+
+[[bench]]
+name = "mol2_parse_benchmark"
+harness = false
+
+[[bench]]
+name = "roundtrip_benchmark"
+harness = false
