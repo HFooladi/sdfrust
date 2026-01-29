@@ -4,7 +4,7 @@ use std::io::BufRead;
 use crate::atom::Atom;
 use crate::bond::{Bond, BondOrder, BondStereo};
 use crate::error::{Result, SdfError};
-use crate::molecule::Molecule;
+use crate::molecule::{Molecule, SdfFormat};
 
 /// SDF V2000 format parser.
 pub struct SdfParser<R> {
@@ -168,6 +168,10 @@ impl<R: BufRead> SdfParser<R> {
             atoms,
             bonds,
             properties,
+            format_version: SdfFormat::V2000,
+            stereogroups: Vec::new(),
+            sgroups: Vec::new(),
+            collections: Vec::new(),
         }))
     }
 
@@ -282,6 +286,10 @@ impl<R: BufRead> SdfParser<R> {
             stereo_parity,
             hydrogen_count,
             valence,
+            v3000_id: None,
+            atom_atom_mapping: None,
+            rgroup_label: None,
+            radical: None,
         })
     }
 
@@ -339,13 +347,10 @@ impl<R: BufRead> SdfParser<R> {
             });
         }
 
-        let bond_type: u8 = line[6..9]
-            .trim()
-            .parse()
-            .map_err(|_| SdfError::Parse {
-                line: self.line_number,
-                message: "Invalid bond type".to_string(),
-            })?;
+        let bond_type: u8 = line[6..9].trim().parse().map_err(|_| SdfError::Parse {
+            line: self.line_number,
+            message: "Invalid bond type".to_string(),
+        })?;
 
         let order = BondOrder::from_sdf(bond_type).ok_or(SdfError::InvalidBondOrder(bond_type))?;
 
@@ -369,6 +374,8 @@ impl<R: BufRead> SdfParser<R> {
             order,
             stereo,
             topology,
+            v3000_id: None,
+            reacting_center: None,
         })
     }
 
@@ -509,6 +516,67 @@ pub fn iter_sdf_file<P: AsRef<std::path::Path>>(
     Ok(SdfIterator::new(reader))
 }
 
+/// Detects the SDF format version from file content.
+///
+/// Reads the first few lines to check for V3000 indicators.
+pub fn detect_sdf_format(content: &str) -> SdfFormat {
+    // V3000 files have "V3000" in the counts line (line 4)
+    let lines: Vec<&str> = content.lines().take(5).collect();
+    if lines.len() >= 4 && lines[3].contains("V3000") {
+        SdfFormat::V3000
+    } else {
+        SdfFormat::V2000
+    }
+}
+
+/// Parses an SDF string with automatic format detection.
+///
+/// This function automatically detects whether the content is V2000 or V3000
+/// format and uses the appropriate parser.
+pub fn parse_sdf_auto_string(content: &str) -> Result<Molecule> {
+    match detect_sdf_format(content) {
+        SdfFormat::V2000 => parse_sdf_string(content),
+        SdfFormat::V3000 => super::sdf_v3000::parse_sdf_v3000_string(content),
+    }
+}
+
+/// Parses multiple molecules from an SDF string with automatic format detection.
+pub fn parse_sdf_auto_string_multi(content: &str) -> Result<Vec<Molecule>> {
+    match detect_sdf_format(content) {
+        SdfFormat::V2000 => parse_sdf_string_multi(content),
+        SdfFormat::V3000 => super::sdf_v3000::parse_sdf_v3000_string_multi(content),
+    }
+}
+
+/// Parses an SDF file with automatic format detection.
+pub fn parse_sdf_auto_file<P: AsRef<std::path::Path>>(path: P) -> Result<Molecule> {
+    // Read the first few lines to detect format
+    let content = std::fs::read_to_string(&path)?;
+    match detect_sdf_format(&content) {
+        SdfFormat::V2000 => {
+            let cursor = std::io::Cursor::new(content);
+            let reader = std::io::BufReader::new(cursor);
+            let mut parser = SdfParser::new(reader);
+            parser.parse_molecule()?.ok_or(SdfError::EmptyFile)
+        }
+        SdfFormat::V3000 => super::sdf_v3000::parse_sdf_v3000_file(path),
+    }
+}
+
+/// Parses all molecules from an SDF file with automatic format detection.
+pub fn parse_sdf_auto_file_multi<P: AsRef<std::path::Path>>(path: P) -> Result<Vec<Molecule>> {
+    let content = std::fs::read_to_string(&path)?;
+    match detect_sdf_format(&content) {
+        SdfFormat::V2000 => {
+            let cursor = std::io::Cursor::new(content);
+            let reader = std::io::BufReader::new(cursor);
+            let iter = SdfIterator::new(reader);
+            iter.collect()
+        }
+        SdfFormat::V3000 => super::sdf_v3000::parse_sdf_v3000_file_multi(path),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -574,10 +642,7 @@ $$$$
 
         assert_eq!(mol.name, "aspirin");
         assert_eq!(mol.get_property("MW"), Some("180.16"));
-        assert_eq!(
-            mol.get_property("SMILES"),
-            Some("CC(=O)OC1=CC=CC=C1C(=O)O")
-        );
+        assert_eq!(mol.get_property("SMILES"), Some("CC(=O)OC1=CC=CC=C1C(=O)O"));
     }
 
     #[test]

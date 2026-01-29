@@ -197,6 +197,10 @@ impl<R: BufRead> Mol2Parser<R> {
             atoms,
             bonds,
             properties,
+            format_version: crate::molecule::SdfFormat::V2000,
+            stereogroups: Vec::new(),
+            sgroups: Vec::new(),
+            collections: Vec::new(),
         }))
     }
 
@@ -251,17 +255,19 @@ impl<R: BufRead> Mol2Parser<R> {
         // parts[7] = subst_name (optional)
         // parts[8] = charge (optional)
 
-        let x: f64 = parts[2].parse().map_err(|_| SdfError::InvalidCoordinate(parts[2].to_string()))?;
-        let y: f64 = parts[3].parse().map_err(|_| SdfError::InvalidCoordinate(parts[3].to_string()))?;
-        let z: f64 = parts[4].parse().map_err(|_| SdfError::InvalidCoordinate(parts[4].to_string()))?;
+        let x: f64 = parts[2]
+            .parse()
+            .map_err(|_| SdfError::InvalidCoordinate(parts[2].to_string()))?;
+        let y: f64 = parts[3]
+            .parse()
+            .map_err(|_| SdfError::InvalidCoordinate(parts[3].to_string()))?;
+        let z: f64 = parts[4]
+            .parse()
+            .map_err(|_| SdfError::InvalidCoordinate(parts[4].to_string()))?;
 
         // Extract element from atom_type (e.g., "C.3" -> "C", "N.ar" -> "N")
         let atom_type = parts[5];
-        let element = atom_type
-            .split('.')
-            .next()
-            .unwrap_or(atom_type)
-            .to_string();
+        let element = atom_type.split('.').next().unwrap_or(atom_type).to_string();
 
         // Parse partial charge if present
         let partial_charge: f64 = if parts.len() > 8 {
@@ -284,11 +290,19 @@ impl<R: BufRead> Mol2Parser<R> {
             stereo_parity: None,
             hydrogen_count: None,
             valence: None,
+            v3000_id: None,
+            atom_atom_mapping: None,
+            rgroup_label: None,
+            radical: None,
         })
     }
 
     /// Parses the BOND section.
-    fn parse_bond_section(&mut self, expected_count: usize, atom_count: usize) -> Result<Vec<Bond>> {
+    fn parse_bond_section(
+        &mut self,
+        expected_count: usize,
+        atom_count: usize,
+    ) -> Result<Vec<Bond>> {
         let mut bonds = Vec::with_capacity(expected_count);
 
         for i in 0..expected_count {
@@ -379,6 +393,8 @@ impl<R: BufRead> Mol2Parser<R> {
             order,
             stereo: BondStereo::None,
             topology: None,
+            v3000_id: None,
+            reacting_center: None,
         })
     }
 

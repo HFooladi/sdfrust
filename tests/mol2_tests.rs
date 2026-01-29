@@ -2,7 +2,7 @@
 //!
 //! These tests verify the MOL2 parser against real file formats.
 
-use sdfrust::{parse_mol2_file, parse_mol2_string, parse_mol2_string_multi, BondOrder};
+use sdfrust::{BondOrder, parse_mol2_file, parse_mol2_string, parse_mol2_string_multi};
 
 const TEST_DATA_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/test_data");
 
@@ -38,8 +38,16 @@ fn test_benzene_aromatic_bonds() {
     let mol = parse_mol2_file(&path).unwrap();
 
     // Count aromatic vs single bonds
-    let aromatic_count = mol.bonds.iter().filter(|b| b.order == BondOrder::Aromatic).count();
-    let single_count = mol.bonds.iter().filter(|b| b.order == BondOrder::Single).count();
+    let aromatic_count = mol
+        .bonds
+        .iter()
+        .filter(|b| b.order == BondOrder::Aromatic)
+        .count();
+    let single_count = mol
+        .bonds
+        .iter()
+        .filter(|b| b.order == BondOrder::Single)
+        .count();
 
     assert_eq!(aromatic_count, 6, "Benzene should have 6 aromatic bonds");
     assert_eq!(single_count, 6, "Benzene should have 6 single C-H bonds");

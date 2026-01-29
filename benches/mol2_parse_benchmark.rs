@@ -2,8 +2,8 @@
 //!
 //! Run with: cargo bench --bench mol2_parse_benchmark
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
-use sdfrust::{parse_mol2_string, parse_mol2_string_multi, Mol2Iterator};
+use criterion::{BenchmarkId, Criterion, Throughput, black_box, criterion_group, criterion_main};
+use sdfrust::{Mol2Iterator, parse_mol2_string, parse_mol2_string_multi};
 use std::io::BufReader;
 
 /// Simple methane molecule (5 atoms, 4 bonds) in MOL2 format
@@ -123,9 +123,7 @@ fn bench_mol2_parse_single(c: &mut Criterion) {
         group.bench_with_input(
             BenchmarkId::new("synthetic_chain", size),
             &mol2,
-            |b, mol2| {
-                b.iter(|| parse_mol2_string(black_box(mol2)).unwrap())
-            },
+            |b, mol2| b.iter(|| parse_mol2_string(black_box(mol2)).unwrap()),
         );
     }
 
@@ -143,9 +141,7 @@ fn bench_mol2_parse_multi(c: &mut Criterion) {
         group.bench_with_input(
             BenchmarkId::new("methane_molecules", count),
             &multi_mol2,
-            |b, mol2| {
-                b.iter(|| parse_mol2_string_multi(black_box(mol2)).unwrap())
-            },
+            |b, mol2| b.iter(|| parse_mol2_string_multi(black_box(mol2)).unwrap()),
         );
     }
 

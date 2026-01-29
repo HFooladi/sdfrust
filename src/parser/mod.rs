@@ -1,12 +1,19 @@
 pub mod mol2;
 pub mod sdf;
+pub mod sdf_v3000;
 
 pub use sdf::{
-    iter_sdf_file, parse_sdf_file, parse_sdf_file_multi, parse_sdf_string, parse_sdf_string_multi,
-    SdfIterator, SdfParser,
+    SdfIterator, SdfParser, detect_sdf_format, iter_sdf_file, parse_sdf_auto_file,
+    parse_sdf_auto_file_multi, parse_sdf_auto_string, parse_sdf_auto_string_multi, parse_sdf_file,
+    parse_sdf_file_multi, parse_sdf_string, parse_sdf_string_multi,
 };
 
 pub use mol2::{
-    iter_mol2_file, parse_mol2_file, parse_mol2_file_multi, parse_mol2_string,
-    parse_mol2_string_multi, Mol2Iterator, Mol2Parser,
+    Mol2Iterator, Mol2Parser, iter_mol2_file, parse_mol2_file, parse_mol2_file_multi,
+    parse_mol2_string, parse_mol2_string_multi,
+};
+
+pub use sdf_v3000::{
+    SdfV3000Iterator, SdfV3000Parser, iter_sdf_v3000_file, parse_sdf_v3000_file,
+    parse_sdf_v3000_file_multi, parse_sdf_v3000_string, parse_sdf_v3000_string_multi,
 };

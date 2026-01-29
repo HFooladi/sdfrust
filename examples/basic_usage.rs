@@ -20,7 +20,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Add atoms with 3D coordinates
     water.atoms.push(Atom::new(0, "O", 0.0000, 0.0000, 0.1173));
     water.atoms.push(Atom::new(1, "H", 0.7572, 0.0000, -0.4692));
-    water.atoms.push(Atom::new(2, "H", -0.7572, 0.0000, -0.4692));
+    water
+        .atoms
+        .push(Atom::new(2, "H", -0.7572, 0.0000, -0.4692));
 
     // Add bonds (O-H single bonds)
     water.bonds.push(Bond::new(0, 1, BondOrder::Single));
@@ -52,10 +54,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Show bond details
     println!("Bond details:");
     for bond in water.bonds() {
-        println!(
-            "  {} -- {} : {:?}",
-            bond.atom1, bond.atom2, bond.order
-        );
+        println!("  {} -- {} : {:?}", bond.atom1, bond.atom2, bond.order);
     }
     println!();
 
@@ -95,25 +94,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut ethanol = Molecule::new("ethanol");
 
     // Add heavy atoms first, then hydrogens
-    ethanol.atoms.push(Atom::new(0, "C", -0.001, 1.086, 0.008));    // C1
-    ethanol.atoms.push(Atom::new(1, "C", 0.002, -0.422, 0.002));    // C2
-    ethanol.atoms.push(Atom::new(2, "O", 1.210, -0.907, -0.003));   // O
-    ethanol.atoms.push(Atom::new(3, "H", 1.020, 1.465, 0.001));     // H on C1
-    ethanol.atoms.push(Atom::new(4, "H", -0.536, 1.449, -0.873));   // H on C1
-    ethanol.atoms.push(Atom::new(5, "H", -0.523, 1.437, 0.902));    // H on C1
-    ethanol.atoms.push(Atom::new(6, "H", -0.524, -0.785, 0.891));   // H on C2
-    ethanol.atoms.push(Atom::new(7, "H", -0.510, -0.793, -0.884));  // H on C2
-    ethanol.atoms.push(Atom::new(8, "H", 1.192, -1.870, -0.003));   // H on O
+    ethanol.atoms.push(Atom::new(0, "C", -0.001, 1.086, 0.008)); // C1
+    ethanol.atoms.push(Atom::new(1, "C", 0.002, -0.422, 0.002)); // C2
+    ethanol.atoms.push(Atom::new(2, "O", 1.210, -0.907, -0.003)); // O
+    ethanol.atoms.push(Atom::new(3, "H", 1.020, 1.465, 0.001)); // H on C1
+    ethanol.atoms.push(Atom::new(4, "H", -0.536, 1.449, -0.873)); // H on C1
+    ethanol.atoms.push(Atom::new(5, "H", -0.523, 1.437, 0.902)); // H on C1
+    ethanol.atoms.push(Atom::new(6, "H", -0.524, -0.785, 0.891)); // H on C2
+    ethanol
+        .atoms
+        .push(Atom::new(7, "H", -0.510, -0.793, -0.884)); // H on C2
+    ethanol.atoms.push(Atom::new(8, "H", 1.192, -1.870, -0.003)); // H on O
 
     // Add bonds
-    ethanol.bonds.push(Bond::new(0, 1, BondOrder::Single));  // C-C
-    ethanol.bonds.push(Bond::new(1, 2, BondOrder::Single));  // C-O
-    ethanol.bonds.push(Bond::new(0, 3, BondOrder::Single));  // C-H
-    ethanol.bonds.push(Bond::new(0, 4, BondOrder::Single));  // C-H
-    ethanol.bonds.push(Bond::new(0, 5, BondOrder::Single));  // C-H
-    ethanol.bonds.push(Bond::new(1, 6, BondOrder::Single));  // C-H
-    ethanol.bonds.push(Bond::new(1, 7, BondOrder::Single));  // C-H
-    ethanol.bonds.push(Bond::new(2, 8, BondOrder::Single));  // O-H
+    ethanol.bonds.push(Bond::new(0, 1, BondOrder::Single)); // C-C
+    ethanol.bonds.push(Bond::new(1, 2, BondOrder::Single)); // C-O
+    ethanol.bonds.push(Bond::new(0, 3, BondOrder::Single)); // C-H
+    ethanol.bonds.push(Bond::new(0, 4, BondOrder::Single)); // C-H
+    ethanol.bonds.push(Bond::new(0, 5, BondOrder::Single)); // C-H
+    ethanol.bonds.push(Bond::new(1, 6, BondOrder::Single)); // C-H
+    ethanol.bonds.push(Bond::new(1, 7, BondOrder::Single)); // C-H
+    ethanol.bonds.push(Bond::new(2, 8, BondOrder::Single)); // O-H
 
     ethanol.set_property("MOLECULAR_WEIGHT", "46.07");
     ethanol.set_property("BOILING_POINT", "78.37 C");
@@ -121,7 +122,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("Molecule: {}", ethanol.name);
     println!("Formula: {}", ethanol.formula());
-    println!("Atoms: {} ({} heavy atoms)",
+    println!(
+        "Atoms: {} ({} heavy atoms)",
         ethanol.atom_count(),
         ethanol.atoms().filter(|a| a.element != "H").count()
     );
@@ -136,11 +138,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Check connectivity
     println!("\nConnectivity:");
-    for i in 0..3 {  // Just heavy atoms
+    for i in 0..3 {
+        // Just heavy atoms
         let neighbors = ethanol.neighbors(i);
         let element = &ethanol.atoms[i].element;
-        println!("  {} (atom {}): {} bonds to {:?}",
-            element, i, neighbors.len(), neighbors);
+        println!(
+            "  {} (atom {}): {} bonds to {:?}",
+            element,
+            i,
+            neighbors.len(),
+            neighbors
+        );
     }
 
     println!("\n=== Example Complete ===");

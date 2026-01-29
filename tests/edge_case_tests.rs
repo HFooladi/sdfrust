@@ -2,9 +2,7 @@
 //!
 //! Tests for unusual, malformed, or boundary condition inputs.
 
-use sdfrust::{
-    parse_sdf_string, write_sdf_string, Atom, Bond, BondOrder, BondStereo, Molecule,
-};
+use sdfrust::{Atom, Bond, BondOrder, BondStereo, Molecule, parse_sdf_string, write_sdf_string};
 
 // ============================================================================
 // Empty and Minimal Molecules
@@ -489,10 +487,7 @@ M  END
     );
 
     for i in 0..100 {
-        sdf.push_str(&format!(
-            "> <PROP{}>\nvalue{}\n\n",
-            i, i
-        ));
+        sdf.push_str(&format!("> <PROP{}>\nvalue{}\n\n", i, i));
     }
     sdf.push_str("$$$$\n");
 
@@ -532,7 +527,8 @@ fn test_roundtrip_with_stereo_bonds() {
     let mut mol = Molecule::new("stereo");
     mol.atoms.push(Atom::new(0, "C", 0.0, 0.0, 0.0));
     mol.atoms.push(Atom::new(1, "C", 1.5, 0.0, 0.0));
-    mol.bonds.push(Bond::with_stereo(0, 1, BondOrder::Single, BondStereo::Up));
+    mol.bonds
+        .push(Bond::with_stereo(0, 1, BondOrder::Single, BondStereo::Up));
 
     let sdf = write_sdf_string(&mol).unwrap();
     let parsed = parse_sdf_string(&sdf).unwrap();
@@ -693,11 +689,11 @@ fn test_error_invalid_bond_order() {
   2  1  0  0  0  0  0  0  0  0999 V2000
     0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
     1.5000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
-  1  2  9  0  0  0  0
+  1  2 11  0  0  0  0
 M  END
 $$$$
 "#;
-    // Bond order 9 is invalid
+    // Bond order 11 is invalid (1-10 are valid per V3000 spec)
     let result = parse_sdf_string(sdf);
     assert!(result.is_err());
 }

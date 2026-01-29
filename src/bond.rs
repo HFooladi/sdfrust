@@ -9,6 +9,10 @@ pub enum BondOrder {
     SingleOrAromatic = 6,
     DoubleOrAromatic = 7,
     Any = 8,
+    /// Dative/coordinate bond (V3000 only).
+    Coordination = 9,
+    /// Hydrogen bond (V3000 only).
+    Hydrogen = 10,
 }
 
 impl BondOrder {
@@ -23,6 +27,8 @@ impl BondOrder {
             6 => Some(BondOrder::SingleOrAromatic),
             7 => Some(BondOrder::DoubleOrAromatic),
             8 => Some(BondOrder::Any),
+            9 => Some(BondOrder::Coordination),
+            10 => Some(BondOrder::Hydrogen),
             _ => None,
         }
     }
@@ -43,6 +49,8 @@ impl BondOrder {
             BondOrder::SingleOrAromatic => 1.25,
             BondOrder::DoubleOrAromatic => 1.75,
             BondOrder::Any => 1.0,
+            BondOrder::Coordination => 1.0,
+            BondOrder::Hydrogen => 0.0,
         }
     }
 }
@@ -94,6 +102,12 @@ pub struct Bond {
 
     /// Bond topology (0 = either, 1 = ring, 2 = chain).
     pub topology: Option<u8>,
+
+    /// Original V3000 bond ID (for round-trip preservation).
+    pub v3000_id: Option<u32>,
+
+    /// Reacting center status for reactions (V3000).
+    pub reacting_center: Option<u8>,
 }
 
 impl Bond {
@@ -105,6 +119,8 @@ impl Bond {
             order,
             stereo: BondStereo::None,
             topology: None,
+            v3000_id: None,
+            reacting_center: None,
         }
     }
 
@@ -116,6 +132,8 @@ impl Bond {
             order,
             stereo,
             topology: None,
+            v3000_id: None,
+            reacting_center: None,
         }
     }
 

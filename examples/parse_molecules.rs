@@ -9,7 +9,7 @@
 //!
 //! Run with: cargo run --example parse_molecules
 
-use sdfrust::{parse_sdf_file, parse_sdf_string, write_sdf_string, BondOrder};
+use sdfrust::{BondOrder, parse_sdf_file, parse_sdf_string, write_sdf_string};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("=== sdfrust Parsing Example ===\n");
@@ -35,9 +35,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Analyze bond types
-    let single = aspirin.bonds().filter(|b| b.order == BondOrder::Single).count();
-    let double = aspirin.bonds().filter(|b| b.order == BondOrder::Double).count();
-    let aromatic = aspirin.bonds().filter(|b| b.order == BondOrder::Aromatic).count();
+    let single = aspirin
+        .bonds()
+        .filter(|b| b.order == BondOrder::Single)
+        .count();
+    let double = aspirin
+        .bonds()
+        .filter(|b| b.order == BondOrder::Double)
+        .count();
+    let aromatic = aspirin
+        .bonds()
+        .filter(|b| b.order == BondOrder::Aromatic)
+        .count();
     println!("\nBond distribution:");
     println!("  Single: {}", single);
     println!("  Double: {}", double);
@@ -48,7 +57,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\nHeavy atoms ({}):", heavy_atoms.len());
     for atom in &heavy_atoms {
         let bonds = aspirin.bonds_for_atom(atom.index);
-        println!("  {:>2} {}: {} bonds", atom.index, atom.element, bonds.len());
+        println!(
+            "  {:>2} {}: {} bonds",
+            atom.index,
+            atom.element,
+            bonds.len()
+        );
     }
 
     println!("\n--- Geometry Analysis ---");
@@ -59,8 +73,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Find atom distances
-    let c1 = &aspirin.atoms[4];  // First carbon
-    let c2 = &aspirin.atoms[5];  // Second carbon
+    let c1 = &aspirin.atoms[4]; // First carbon
+    let c2 = &aspirin.atoms[5]; // Second carbon
     let distance = c1.distance_to(c2);
     println!("C-C bond length: {:.3} Angstroms", distance);
 
@@ -82,7 +96,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Check for nitrogen (caffeine has 4)
     let nitrogens = caffeine.atoms_by_element("N");
-    println!("Nitrogen atoms: {} (caffeine has nitrogen heterocycles)", nitrogens.len());
+    println!(
+        "Nitrogen atoms: {} (caffeine has nitrogen heterocycles)",
+        nitrogens.len()
+    );
 
     println!("\n--- Multi-molecule Iteration ---");
 
@@ -122,7 +139,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "tests/test_data/methionine.sdf",
     ];
 
-    println!("{:<12} {:>6} {:>6} {:>15}", "Name", "Atoms", "Bonds", "Formula");
+    println!(
+        "{:<12} {:>6} {:>6} {:>15}",
+        "Name", "Atoms", "Bonds", "Formula"
+    );
     println!("{}", "-".repeat(45));
 
     for file in &test_files {
@@ -146,7 +166,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("Original atoms: {}", original.atom_count());
     println!("Reparsed atoms: {}", reparsed.atom_count());
-    println!("Atoms match: {}", original.atom_count() == reparsed.atom_count());
+    println!(
+        "Atoms match: {}",
+        original.atom_count() == reparsed.atom_count()
+    );
 
     // Compare coordinates
     let mut coord_match = true;

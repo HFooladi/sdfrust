@@ -4,9 +4,12 @@
 //!
 //! ## Features
 //!
-//! - Parse SDF V2000 format files (single and multi-molecule)
+//! - Parse SDF V2000 and V3000 format files (single and multi-molecule)
 //! - Parse TRIPOS MOL2 format files (single and multi-molecule)
-//! - Write SDF V2000 format files
+//! - Write SDF V2000 and V3000 format files
+//! - Automatic format detection for SDF files
+//! - Support for molecules with >999 atoms/bonds (V3000)
+//! - Enhanced stereochemistry, SGroups, and collections (V3000)
 //! - Iterate over large files without loading everything into memory
 //! - Access atom coordinates, bonds, and molecule properties
 //! - Zero external dependencies for parsing (only `thiserror` for error handling)
@@ -368,39 +371,87 @@
 //!
 //! ### SDF V3000
 //!
-//! SDF V3000 (extended format for >999 atoms) is planned for a future release.
-//! See [ROADMAP.md](https://github.com/hfooladi/sdfrust) for development plans.
+//! SDF V3000 format is fully supported for both parsing and writing:
+//!
+//! ```rust
+//! use sdfrust::{parse_sdf_auto_string, write_sdf_auto_string, SdfFormat};
+//!
+//! // V3000 content is automatically detected and parsed
+//! let v3000_content = r#"test
+//!
+//!
+//!   0  0  0     0  0            999 V3000
+//! M  V30 BEGIN CTAB
+//! M  V30 COUNTS 2 1 0 0 0
+//! M  V30 BEGIN ATOM
+//! M  V30 1 C 0.0000 0.0000 0.0000 0
+//! M  V30 2 O 1.2000 0.0000 0.0000 0
+//! M  V30 END ATOM
+//! M  V30 BEGIN BOND
+//! M  V30 1 2 1 2
+//! M  V30 END BOND
+//! M  V30 END CTAB
+//! M  END
+//! $$$$
+//! "#;
+//!
+//! let mol = parse_sdf_auto_string(v3000_content).unwrap();
+//! assert_eq!(mol.format_version, SdfFormat::V3000);
+//! ```
 //!
 //! ### Format Detection
 //!
 //! The library uses file content to determine format:
-//! - SDF files contain `V2000` in the counts line and end with `$$$$`
+//! - SDF V2000 files contain `V2000` in the counts line
+//! - SDF V3000 files contain `V3000` in the counts line
 //! - MOL2 files start with `@<TRIPOS>MOLECULE`
 
 pub mod atom;
 pub mod bond;
+pub mod collection;
 pub mod error;
 pub mod molecule;
 pub mod parser;
+pub mod sgroup;
+pub mod stereogroup;
 pub mod writer;
 
 // Re-export main types
 pub use atom::Atom;
 pub use bond::{Bond, BondOrder, BondStereo};
+pub use collection::{Collection, CollectionType};
 pub use error::{Result, SdfError};
-pub use molecule::Molecule;
+pub use molecule::{Molecule, SdfFormat};
+pub use sgroup::{SGroup, SGroupType};
+pub use stereogroup::{StereoGroup, StereoGroupType};
 
 // Re-export parser functions
 pub use parser::{
-    iter_sdf_file, parse_sdf_file, parse_sdf_file_multi, parse_sdf_string, parse_sdf_string_multi,
-    SdfIterator, SdfParser,
+    SdfIterator, SdfParser, detect_sdf_format, iter_sdf_file, parse_sdf_auto_file,
+    parse_sdf_auto_file_multi, parse_sdf_auto_string, parse_sdf_auto_string_multi, parse_sdf_file,
+    parse_sdf_file_multi, parse_sdf_string, parse_sdf_string_multi,
+};
+
+// Re-export V3000 parser functions
+pub use parser::{
+    SdfV3000Iterator, SdfV3000Parser, iter_sdf_v3000_file, parse_sdf_v3000_file,
+    parse_sdf_v3000_file_multi, parse_sdf_v3000_string, parse_sdf_v3000_string_multi,
 };
 
 // Re-export MOL2 parser functions
 pub use parser::{
-    iter_mol2_file, parse_mol2_file, parse_mol2_file_multi, parse_mol2_string,
-    parse_mol2_string_multi, Mol2Iterator, Mol2Parser,
+    Mol2Iterator, Mol2Parser, iter_mol2_file, parse_mol2_file, parse_mol2_file_multi,
+    parse_mol2_string, parse_mol2_string_multi,
 };
 
 // Re-export writer functions
-pub use writer::{write_sdf, write_sdf_file, write_sdf_file_multi, write_sdf_multi, write_sdf_string};
+pub use writer::{
+    write_sdf, write_sdf_file, write_sdf_file_multi, write_sdf_multi, write_sdf_string,
+};
+
+// Re-export V3000 writer functions
+pub use writer::{
+    needs_v3000, write_sdf_auto, write_sdf_auto_file, write_sdf_auto_string, write_sdf_v3000,
+    write_sdf_v3000_file, write_sdf_v3000_file_multi, write_sdf_v3000_multi,
+    write_sdf_v3000_string,
+};

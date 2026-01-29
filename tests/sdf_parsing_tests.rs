@@ -1,6 +1,6 @@
 use sdfrust::{
-    parse_sdf_file, parse_sdf_string, parse_sdf_string_multi, write_sdf_string, Atom, Bond,
-    BondOrder, BondStereo, Molecule,
+    Atom, Bond, BondOrder, BondStereo, Molecule, parse_sdf_file, parse_sdf_string,
+    parse_sdf_string_multi, write_sdf_string,
 };
 
 const METHANE_SDF: &str = r#"methane
@@ -418,8 +418,10 @@ fn test_bond_order_from_sdf() {
     assert_eq!(BondOrder::from_sdf(2), Some(BondOrder::Double));
     assert_eq!(BondOrder::from_sdf(3), Some(BondOrder::Triple));
     assert_eq!(BondOrder::from_sdf(4), Some(BondOrder::Aromatic));
+    assert_eq!(BondOrder::from_sdf(9), Some(BondOrder::Coordination));
+    assert_eq!(BondOrder::from_sdf(10), Some(BondOrder::Hydrogen));
     assert_eq!(BondOrder::from_sdf(0), None);
-    assert_eq!(BondOrder::from_sdf(9), None);
+    assert_eq!(BondOrder::from_sdf(11), None);
 }
 
 #[test]

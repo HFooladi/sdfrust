@@ -3,7 +3,7 @@
 //! These tests validate parsing against actual chemical structures
 //! from the PubChem database to ensure real-world compatibility.
 
-use sdfrust::{parse_sdf_file, write_sdf_string, BondOrder, Molecule};
+use sdfrust::{BondOrder, Molecule, parse_sdf_file, write_sdf_string};
 
 // ============================================================================
 // Test Data Structures
@@ -161,7 +161,10 @@ fn test_aspirin_connectivity() {
     let mol = parse_sdf_file("tests/test_data/aspirin.sdf").unwrap();
 
     // Aspirin has a benzene ring - check for double bonds
-    let double_bonds: Vec<_> = mol.bonds().filter(|b| b.order == BondOrder::Double).collect();
+    let double_bonds: Vec<_> = mol
+        .bonds()
+        .filter(|b| b.order == BondOrder::Double)
+        .collect();
     assert!(
         double_bonds.len() >= 2,
         "Aspirin should have at least 2 double bonds (C=O groups)"
@@ -430,9 +433,18 @@ fn test_molecule_centering() {
     mol.center();
 
     let centroid = mol.centroid().unwrap();
-    assert!(centroid.0.abs() < 0.001, "X centroid should be ~0 after centering");
-    assert!(centroid.1.abs() < 0.001, "Y centroid should be ~0 after centering");
-    assert!(centroid.2.abs() < 0.001, "Z centroid should be ~0 after centering");
+    assert!(
+        centroid.0.abs() < 0.001,
+        "X centroid should be ~0 after centering"
+    );
+    assert!(
+        centroid.1.abs() < 0.001,
+        "Y centroid should be ~0 after centering"
+    );
+    assert!(
+        centroid.2.abs() < 0.001,
+        "Z centroid should be ~0 after centering"
+    );
 }
 
 // ============================================================================
@@ -522,9 +534,24 @@ fn test_coordinates_are_finite() {
     for file in &files {
         let mol = parse_sdf_file(file).unwrap();
         for atom in mol.atoms() {
-            assert!(atom.x.is_finite(), "Non-finite X in {} at atom {}", file, atom.index);
-            assert!(atom.y.is_finite(), "Non-finite Y in {} at atom {}", file, atom.index);
-            assert!(atom.z.is_finite(), "Non-finite Z in {} at atom {}", file, atom.index);
+            assert!(
+                atom.x.is_finite(),
+                "Non-finite X in {} at atom {}",
+                file,
+                atom.index
+            );
+            assert!(
+                atom.y.is_finite(),
+                "Non-finite Y in {} at atom {}",
+                file,
+                atom.index
+            );
+            assert!(
+                atom.z.is_finite(),
+                "Non-finite Z in {} at atom {}",
+                file,
+                atom.index
+            );
         }
     }
 }

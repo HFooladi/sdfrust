@@ -4,7 +4,7 @@
 //!
 //! Run with: cargo run --release --example benchmark
 
-use sdfrust::{parse_sdf_string, write_sdf_string, Atom, Bond, BondOrder, Molecule};
+use sdfrust::{Atom, Bond, BondOrder, Molecule, parse_sdf_string, write_sdf_string};
 use std::time::Instant;
 
 fn main() {
@@ -58,10 +58,7 @@ $$$$
     let elapsed = start.elapsed();
     let per_mol = elapsed.as_nanos() as f64 / iterations as f64;
 
-    println!(
-        "  Parsed {} molecules in {:?}",
-        iterations, elapsed
-    );
+    println!("  Parsed {} molecules in {:?}", iterations, elapsed);
     println!("  Average: {:.2} ns/molecule", per_mol);
     println!("  Rate: {:.0} molecules/sec", 1e9 / per_mol);
 }
@@ -130,10 +127,7 @@ $$$$
     let elapsed = start.elapsed();
     let per_mol = elapsed.as_nanos() as f64 / iterations as f64;
 
-    println!(
-        "  Round-tripped {} molecules in {:?}",
-        iterations, elapsed
-    );
+    println!("  Round-tripped {} molecules in {:?}", iterations, elapsed);
     println!("  Average: {:.2} ns/molecule", per_mol);
     println!("  Rate: {:.0} round-trips/sec", 1e9 / per_mol);
 }

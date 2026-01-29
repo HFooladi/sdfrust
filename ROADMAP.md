@@ -161,32 +161,57 @@ open target/criterion/report/index.html
 
 ---
 
-## Phase 6: SDF V3000 Parser
+## Phase 6: SDF V3000 Parser & Writer ✅ COMPLETE
 
-**Status:** Planned
+**Status:** Implemented and tested
 
 ### Deliverables
-- [ ] Parse V3000 counts line (M V30 BEGIN CTAB)
-- [ ] Parse V3000 atom block (M V30 BEGIN ATOM)
-- [ ] Parse V3000 bond block (M V30 BEGIN BOND)
-- [ ] Handle extended features:
-  - [ ] Atom lists
-  - [ ] R-group labels
-  - [ ] Enhanced stereochemistry
-  - [ ] Atom-to-atom mapping
-- [ ] V3000 writer
+- [x] Parse V3000 counts line (M V30 BEGIN CTAB)
+- [x] Parse V3000 atom block (M V30 BEGIN ATOM)
+- [x] Parse V3000 bond block (M V30 BEGIN BOND)
+- [x] Handle extended features:
+  - [x] Extended bond types (Coordination=9, Hydrogen=10)
+  - [x] R-group labels
+  - [x] Enhanced stereochemistry (StereoGroups)
+  - [x] Atom-to-atom mapping
+  - [x] Radical state
+  - [x] SGroups (superatoms, polymers)
+  - [x] Collections (atom lists, R-groups)
+- [x] V3000 writer
+- [x] Automatic format detection (V2000 vs V3000)
+- [x] Auto-format selection for writing (based on molecule needs)
+
+### New Types
+- `SdfFormat` enum: V2000, V3000
+- `StereoGroup`, `StereoGroupType`: Enhanced stereochemistry
+- `SGroup`, `SGroupType`: Superatoms, polymers, etc.
+- `Collection`, `CollectionType`: Atom lists, R-groups
+
+### Extended Atom/Bond Fields
+- Atoms: v3000_id, atom_atom_mapping, rgroup_label, radical
+- Bonds: v3000_id, reacting_center, Coordination, Hydrogen bond types
+
+### Test Coverage
+- 31 V3000-specific tests
+- Parsing: basic molecules, charges, radicals, aromatic bonds, stereo
+- Writing: simple molecules, charges, properties, round-trip
+- Edge cases: empty molecules, atoms-only, multi-molecule files
+- Format detection and auto-selection
 
 ---
 
-## Phase 7: Format Auto-Detection
+## Phase 7: Format Auto-Detection ✅ COMPLETE
 
-**Status:** Planned
+**Status:** Implemented (integrated with Phase 6)
 
 ### Deliverables
-- [ ] Detect format from file extension (.sdf, .mol, .mol2)
-- [ ] Detect format from file content (header patterns)
-- [ ] Unified `parse_molecule_file()` function
-- [ ] Gzip support (transparent decompression)
+- [x] Detect format from file content (V2000 vs V3000)
+- [x] `detect_sdf_format()` function
+- [x] `parse_sdf_auto_string()` / `parse_sdf_auto_file()` functions
+- [x] `write_sdf_auto()` - auto-selects V2000/V3000 based on molecule needs
+- [x] `needs_v3000()` - checks if molecule requires V3000 format
+- [ ] Detect format from file extension (.sdf, .mol, .mol2) - deferred
+- [ ] Gzip support (transparent decompression) - deferred
 
 ---
 
@@ -285,7 +310,7 @@ Following pdbrust conventions:
 | 0.2.0   | 3      | Comprehensive testing |
 | 0.3.0   | 4      | MOL2 support |
 | 0.4.0   | 5      | **Performance benchmarks vs Python/RDKit** |
-| 0.5.0   | 6-7    | SDF V3000, auto-detection |
+| 0.5.0   | 6-7    | **SDF V3000, auto-detection** ✅ COMPLETE |
 | 0.6.0   | 8      | Basic descriptors |
 | 0.7.0   | 9      | Python bindings |
 | 1.0.0   | 10-11  | Stable API, advanced features |

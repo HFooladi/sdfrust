@@ -35,6 +35,21 @@ pub enum SdfError {
 
     #[error("Invalid charge value: {0}")]
     InvalidCharge(String),
+
+    #[error("Invalid V3000 block: {0}")]
+    InvalidV3000Block(String),
+
+    #[error("Invalid V3000 atom line at line {line}: {message}")]
+    InvalidV3000AtomLine { line: usize, message: String },
+
+    #[error("Invalid V3000 bond line at line {line}: {message}")]
+    InvalidV3000BondLine { line: usize, message: String },
+
+    #[error("Atom ID {id} not found in V3000 ID mapping")]
+    AtomIdNotFound { id: u32 },
+
+    #[error("Unsupported V3000 feature: {0}")]
+    UnsupportedV3000Feature(String),
 }
 
 /// Result type alias for SDF operations.

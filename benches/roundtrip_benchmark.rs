@@ -2,8 +2,10 @@
 //!
 //! Run with: cargo bench --bench roundtrip_benchmark
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
-use sdfrust::{parse_sdf_string, parse_sdf_string_multi, write_sdf_string, Atom, Bond, BondOrder, Molecule};
+use criterion::{BenchmarkId, Criterion, Throughput, black_box, criterion_group, criterion_main};
+use sdfrust::{
+    Atom, Bond, BondOrder, Molecule, parse_sdf_string, parse_sdf_string_multi, write_sdf_string,
+};
 
 /// Simple methane molecule (5 atoms, 4 bonds)
 const METHANE_SDF: &str = r#"methane
@@ -142,16 +144,12 @@ fn bench_roundtrip_single(c: &mut Criterion) {
     let sizes = [10, 50, 100, 500];
     for size in sizes {
         let sdf = generate_synthetic_chain(size);
-        group.bench_with_input(
-            BenchmarkId::new("synthetic_chain", size),
-            &sdf,
-            |b, sdf| {
-                b.iter(|| {
-                    let mol = parse_sdf_string(black_box(sdf)).unwrap();
-                    write_sdf_string(black_box(&mol)).unwrap()
-                })
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("synthetic_chain", size), &sdf, |b, sdf| {
+            b.iter(|| {
+                let mol = parse_sdf_string(black_box(sdf)).unwrap();
+                write_sdf_string(black_box(&mol)).unwrap()
+            })
+        });
     }
 
     group.finish();

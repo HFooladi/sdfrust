@@ -30,6 +30,18 @@ pub struct Atom {
 
     /// Valence (0 = use default, 15 = zero valence).
     pub valence: Option<u8>,
+
+    /// Original V3000 atom ID (for round-trip preservation).
+    pub v3000_id: Option<u32>,
+
+    /// Atom-atom mapping number for reactions (V3000).
+    pub atom_atom_mapping: Option<u32>,
+
+    /// R-group label (1-32 for R1-R32).
+    pub rgroup_label: Option<u8>,
+
+    /// Radical state (0=none, 1=singlet, 2=doublet, 3=triplet).
+    pub radical: Option<u8>,
 }
 
 impl Atom {
@@ -46,6 +58,10 @@ impl Atom {
             stereo_parity: None,
             hydrogen_count: None,
             valence: None,
+            v3000_id: None,
+            atom_atom_mapping: None,
+            rgroup_label: None,
+            radical: None,
         }
     }
 
@@ -81,6 +97,10 @@ impl Default for Atom {
             stereo_parity: None,
             hydrogen_count: None,
             valence: None,
+            v3000_id: None,
+            atom_atom_mapping: None,
+            rgroup_label: None,
+            radical: None,
         }
     }
 }

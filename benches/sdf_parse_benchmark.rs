@@ -2,8 +2,8 @@
 //!
 //! Run with: cargo bench --bench sdf_parse_benchmark
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
-use sdfrust::{parse_sdf_string, parse_sdf_string_multi, SdfIterator};
+use criterion::{BenchmarkId, Criterion, Throughput, black_box, criterion_group, criterion_main};
+use sdfrust::{SdfIterator, parse_sdf_string, parse_sdf_string_multi};
 use std::io::BufReader;
 
 /// Simple methane molecule (5 atoms, 4 bonds)
@@ -82,7 +82,10 @@ fn generate_synthetic_chain(num_atoms: usize) -> String {
 
     // Header (line 1: name, line 2: program info, line 3: comment, line 4: counts)
     sdf.push_str(&format!("synthetic_chain_{}\n\n\n", num_atoms));
-    sdf.push_str(&format!("{:3}{:3}  0  0  0  0  0  0  0  0999 V2000\n", num_atoms, num_bonds));
+    sdf.push_str(&format!(
+        "{:3}{:3}  0  0  0  0  0  0  0  0999 V2000\n",
+        num_atoms, num_bonds
+    ));
 
     // Atoms - linear chain of carbons
     for i in 0..num_atoms {
@@ -126,13 +129,9 @@ fn bench_parse_single(c: &mut Criterion) {
     let sizes = [10, 50, 100, 500];
     for size in sizes {
         let sdf = generate_synthetic_chain(size);
-        group.bench_with_input(
-            BenchmarkId::new("synthetic_chain", size),
-            &sdf,
-            |b, sdf| {
-                b.iter(|| parse_sdf_string(black_box(sdf)).unwrap())
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("synthetic_chain", size), &sdf, |b, sdf| {
+            b.iter(|| parse_sdf_string(black_box(sdf)).unwrap())
+        });
     }
 
     group.finish();
@@ -149,9 +148,7 @@ fn bench_parse_multi(c: &mut Criterion) {
         group.bench_with_input(
             BenchmarkId::new("methane_molecules", count),
             &multi_sdf,
-            |b, sdf| {
-                b.iter(|| parse_sdf_string_multi(black_box(sdf)).unwrap())
-            },
+            |b, sdf| b.iter(|| parse_sdf_string_multi(black_box(sdf)).unwrap()),
         );
     }
 
@@ -205,13 +202,9 @@ fn bench_parse_real_files(c: &mut Criterion) {
         let filepath = test_dir.join(filename);
         if filepath.exists() {
             let content = std::fs::read_to_string(&filepath).unwrap();
-            group.bench_with_input(
-                BenchmarkId::new("file", name),
-                &content,
-                |b, content| {
-                    b.iter(|| parse_sdf_string(black_box(content)).unwrap())
-                },
-            );
+            group.bench_with_input(BenchmarkId::new("file", name), &content, |b, content| {
+                b.iter(|| parse_sdf_string(black_box(content)).unwrap())
+            });
         }
     }
 
