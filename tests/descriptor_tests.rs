@@ -419,8 +419,8 @@ fn test_ring_atoms_toluene_like() {
     let in_ring = ring_atoms(&mol);
     assert_eq!(in_ring.len(), 7);
     // Ring carbons (0-5) should be in ring
-    for i in 0..6 {
-        assert!(in_ring[i], "Atom {} should be in ring", i);
+    for (i, &is_in_ring) in in_ring.iter().enumerate().take(6) {
+        assert!(is_in_ring, "Atom {} should be in ring", i);
     }
     // Methyl (6) should not be in ring
     assert!(!in_ring[6], "Methyl carbon should not be in ring");
@@ -457,8 +457,8 @@ fn test_ring_bonds_toluene_like() {
     let in_ring = ring_bonds(&mol);
     assert_eq!(in_ring.len(), 7);
     // Ring bonds (0-5) should be in ring
-    for i in 0..6 {
-        assert!(in_ring[i], "Bond {} should be in ring", i);
+    for (i, &is_in_ring) in in_ring.iter().enumerate().take(6) {
+        assert!(is_in_ring, "Bond {} should be in ring", i);
     }
     // Exocyclic bond (6) should not be in ring
     assert!(!in_ring[6], "Exocyclic bond should not be in ring");
