@@ -1,81 +1,94 @@
 # sdfrust
 
-A fast, pure-Rust parser for SDF (Structure Data File) and MOL2 chemical structure files.
+A fast, pure-Rust parser for SDF (Structure Data File) and MOL2 chemical structure files, with Python bindings.
 
 ## Features
 
-- Parse SDF V2000 format files (single and multi-molecule)
-- Write SDF V2000 format files
-- Iterate over large SDF files without loading everything into memory
-- Access atom coordinates, bonds, and molecule properties
-- Zero external dependencies for parsing (only `thiserror` for error handling)
+- **SDF V2000/V3000**: Full read/write support for both SDF format versions
+- **MOL2 (TRIPOS)**: Full read support for MOL2 format
+- **Python Bindings**: First-class Python API with NumPy integration
+- **Streaming Parsing**: Memory-efficient iteration over large files
+- **Molecular Descriptors**: MW, exact mass, ring count, rotatable bonds, and more
+- **High Performance**: ~220,000 molecules/sec (4-7x faster than RDKit)
 
 ## Installation
+
+### Rust
 
 Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-sdfrust = "0.1"
+sdfrust = "0.4"
+```
+
+### Python
+
+```bash
+# From source (requires Rust toolchain)
+cd sdfrust-python
+pip install maturin
+maturin develop --features numpy
 ```
 
 ## Quick Start
 
-### Parse a single molecule
+### Rust
 
 ```rust
-use sdfrust::parse_sdf_file;
+use sdfrust::{parse_sdf_file, parse_mol2_file, write_sdf_file};
 
-let molecule = parse_sdf_file("molecule.sdf")?;
-println!("Name: {}", molecule.name);
-println!("Atoms: {}", molecule.atom_count());
-println!("Formula: {}", molecule.formula());
-```
+// Parse a single molecule
+let mol = parse_sdf_file("molecule.sdf")?;
+println!("Name: {}", mol.name);
+println!("Atoms: {}", mol.atom_count());
+println!("Formula: {}", mol.formula());
+println!("MW: {:.2}", mol.molecular_weight().unwrap());
 
-### Parse multiple molecules
-
-```rust
-use sdfrust::parse_sdf_file_multi;
-
+// Parse multiple molecules
 let molecules = parse_sdf_file_multi("database.sdf")?;
-for mol in &molecules {
-    println!("{}: {} atoms", mol.name, mol.atom_count());
-}
-```
 
-### Iterate over a large file (memory efficient)
-
-```rust
-use sdfrust::iter_sdf_file;
-
+// Iterate over large files (memory efficient)
 for result in iter_sdf_file("large_database.sdf")? {
     let mol = result?;
-    // Process each molecule without loading all into memory
+    // Process each molecule
 }
+
+// Write molecules
+write_sdf_file("output.sdf", &mol)?;
 ```
 
-### Parse from string
+### Python
 
-```rust
-use sdfrust::parse_sdf_string;
+```python
+import sdfrust
 
-let sdf_content = "...";  // SDF file content
-let mol = parse_sdf_string(sdf_content)?;
-```
+# Parse molecules
+mol = sdfrust.parse_sdf_file("molecule.sdf")
+mol = sdfrust.parse_mol2_file("molecule.mol2")
 
-### Write molecules
+# Access properties
+print(f"Name: {mol.name}")
+print(f"Atoms: {mol.num_atoms}")
+print(f"Formula: {mol.formula()}")
+print(f"MW: {mol.molecular_weight():.2f}")
 
-```rust
-use sdfrust::{Molecule, Atom, Bond, BondOrder, write_sdf_file};
+# Molecular descriptors
+print(f"Rings: {mol.ring_count()}")
+print(f"Rotatable bonds: {mol.rotatable_bond_count()}")
+print(f"Heavy atoms: {mol.heavy_atom_count()}")
 
-let mut mol = Molecule::new("water");
-mol.atoms.push(Atom::new(0, "O", 0.0, 0.0, 0.0));
-mol.atoms.push(Atom::new(1, "H", 0.96, 0.0, 0.0));
-mol.atoms.push(Atom::new(2, "H", -0.24, 0.93, 0.0));
-mol.bonds.push(Bond::new(0, 1, BondOrder::Single));
-mol.bonds.push(Bond::new(0, 2, BondOrder::Single));
+# NumPy integration
+import numpy as np
+coords = mol.get_coords_array()  # (N, 3) array
+atomic_nums = mol.get_atomic_numbers()  # (N,) array
 
-write_sdf_file("water.sdf", &mol)?;
+# Iterate over large files
+for mol in sdfrust.iter_sdf_file("large_database.sdf"):
+    print(f"{mol.name}: MW={mol.molecular_weight():.2f}")
+
+# Write molecules
+sdfrust.write_sdf_file(mol, "output.sdf")
 ```
 
 ## Data Model
@@ -90,6 +103,7 @@ pub struct Molecule {
     pub atoms: Vec<Atom>,
     pub bonds: Vec<Bond>,
     pub properties: HashMap<String, String>,
+    pub format_version: SdfFormat,  // V2000 or V3000
 }
 ```
 
@@ -104,7 +118,7 @@ pub struct Atom {
     pub x: f64, pub y: f64, pub z: f64,
     pub formal_charge: i8,
     pub mass_difference: i8,
-    pub stereo_parity: Option<u8>,
+    // ... additional fields
 }
 ```
 
@@ -127,6 +141,7 @@ pub struct Bond {
 pub enum BondOrder {
     Single, Double, Triple, Aromatic,
     SingleOrDouble, SingleOrAromatic, DoubleOrAromatic, Any,
+    Coordination, Hydrogen,  // V3000 only
 }
 ```
 
@@ -137,10 +152,6 @@ pub enum BondOrder {
 mol.atom_count()
 mol.bond_count()
 mol.is_empty()
-
-// Iterators
-mol.atoms()
-mol.bonds()
 
 // Connectivity
 mol.neighbors(atom_index)      // Get connected atom indices
@@ -162,27 +173,90 @@ mol.centroid()        // Geometric center
 mol.center()          // Move centroid to origin
 mol.translate(x, y, z)
 
+// Descriptors
+mol.molecular_weight()     // IUPAC 2021 atomic weights
+mol.exact_mass()           // Monoisotopic mass
+mol.heavy_atom_count()     // Non-hydrogen atoms
+mol.ring_count()           // Using Euler formula
+mol.rotatable_bond_count() // RDKit-compatible definition
+mol.is_atom_in_ring(idx)
+mol.is_bond_in_ring(idx)
+
 // Filtering
 mol.atoms_by_element("C")
 mol.bonds_by_order(BondOrder::Double)
 ```
 
-## Supported Format
+## Supported Formats
 
-Currently supports **SDF V2000** format, which is the most widely used format for chemical structure data.
+| Format | Read | Write |
+|--------|------|-------|
+| SDF V2000 | ✅ | ✅ |
+| SDF V3000 | ✅ | ✅ |
+| MOL2 (TRIPOS) | ✅ | - |
 
-### Planned
+### Format Auto-Detection
 
-- SDF V3000 format
-- MOL2 (TRIPOS) format
+```rust
+// Automatically detect V2000 vs V3000
+let mol = parse_sdf_auto_file("molecule.sdf")?;
+
+// Automatically choose format based on molecule requirements
+write_sdf_auto_file("output.sdf", &mol)?;
+```
 
 ## Performance
 
 The library is designed for high performance:
 
+| Tool | Throughput | vs sdfrust |
+|------|------------|------------|
+| **sdfrust** | ~220,000 mol/s | baseline |
+| RDKit | ~30,000-50,000 mol/s | 4-7x slower |
+| Pure Python | ~3,000-5,000 mol/s | 40-70x slower |
+
 - Streaming parser for memory-efficient processing of large files
 - Minimal allocations during parsing
 - Zero-copy where possible
+
+## Python API Reference
+
+### Parsing Functions
+
+```python
+# SDF (V2000/V3000)
+mol = sdfrust.parse_sdf_file(path)
+mol = sdfrust.parse_sdf_string(content)
+mol = sdfrust.parse_sdf_auto_file(path)  # Auto-detect format
+mols = sdfrust.parse_sdf_file_multi(path)
+
+# MOL2
+mol = sdfrust.parse_mol2_file(path)
+mol = sdfrust.parse_mol2_string(content)
+mols = sdfrust.parse_mol2_file_multi(path)
+
+# Iterators (memory-efficient)
+for mol in sdfrust.iter_sdf_file(path):
+    process(mol)
+```
+
+### Writing Functions
+
+```python
+sdfrust.write_sdf_file(mol, path)
+sdfrust.write_sdf_string(mol)
+sdfrust.write_sdf_auto_file(mol, path)  # Auto-select V2000/V3000
+sdfrust.write_sdf_file_multi(mols, path)
+```
+
+### Classes
+
+- `Molecule`: Main molecular container
+- `Atom`: Atom with coordinates
+- `Bond`: Bond between atoms
+- `BondOrder`: Bond type enum
+- `BondStereo`: Stereochemistry enum
+- `SdfFormat`: Format version enum
 
 ## License
 

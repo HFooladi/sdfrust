@@ -7,6 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-01-30
+
+### Added
+
+- **Python Bindings** (`sdfrust-python/` crate)
+  - PyO3-based Python bindings with full API coverage
+  - `PyAtom`, `PyBond`, `PyBondOrder`, `PyBondStereo` wrapper classes
+  - `PyMolecule` with all properties and descriptor methods
+  - SDF V2000/V3000 parsing functions (`parse_sdf_file`, `parse_sdf_string`, etc.)
+  - SDF writing functions (`write_sdf_file`, `write_sdf_string`, etc.)
+  - MOL2 parsing functions (`parse_mol2_file`, `parse_mol2_string`, etc.)
+  - Memory-efficient streaming iterators (`iter_sdf_file`, `iter_mol2_file`)
+  - NumPy integration for coordinate arrays (`get_coords_array`, `set_coords_array`)
+  - Atomic number array support (`get_atomic_numbers`)
+  - 33 pytest tests covering all functionality
+
+- **Workspace Configuration**
+  - Root `Cargo.toml` now defines workspace with `sdfrust` and `sdfrust-python` members
+  - Shared dependencies and build configuration
+
+### Python API Highlights
+
+```python
+import sdfrust
+
+# Parse molecules
+mol = sdfrust.parse_sdf_file("molecule.sdf")
+mol = sdfrust.parse_mol2_file("molecule.mol2")
+
+# Access properties
+print(mol.name, mol.num_atoms, mol.formula())
+print(mol.molecular_weight(), mol.ring_count())
+
+# NumPy integration
+coords = mol.get_coords_array()  # (N, 3) array
+
+# Iterate over large files
+for mol in sdfrust.iter_sdf_file("large.sdf"):
+    process(mol)
+```
+
 ## [0.3.0] - 2026-01-30
 
 ### Added
@@ -98,7 +139,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `formula()`, `centroid()`, `translate()`, `center()`
   - `neighbors()`, `bonds_for_atom()`, `element_counts()`
 
-[Unreleased]: https://github.com/HFooladi/sdfrust/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/HFooladi/sdfrust/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/HFooladi/sdfrust/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/HFooladi/sdfrust/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/HFooladi/sdfrust/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/HFooladi/sdfrust/releases/tag/v0.1.0

@@ -20,10 +20,33 @@ src/
 ├── parser/
 │   ├── mod.rs          # Parser exports
 │   ├── sdf.rs          # SDF V2000 parser + iterator
+│   ├── sdf_v3000.rs    # SDF V3000 parser + iterator
 │   └── mol2.rs         # TRIPOS MOL2 parser + iterator
-└── writer/
-    ├── mod.rs          # Writer exports
-    └── sdf.rs          # SDF V2000 writer
+├── writer/
+│   ├── mod.rs          # Writer exports
+│   ├── sdf.rs          # SDF V2000 writer
+│   └── sdf_v3000.rs    # SDF V3000 writer + auto-format
+├── descriptors/
+│   ├── mod.rs          # Descriptor exports
+│   ├── elements.rs     # Element data table
+│   ├── molecular.rs    # MW, exact mass, heavy atom count
+│   └── topological.rs  # Ring count, rotatable bonds
+├── sgroup.rs           # SGroup types (V3000)
+├── stereogroup.rs      # Stereogroup types (V3000)
+└── collection.rs       # Collection types (V3000)
+
+sdfrust-python/         # Python bindings (PyO3)
+├── src/
+│   ├── lib.rs          # PyO3 module registration
+│   ├── error.rs        # Error conversion
+│   ├── atom.rs         # PyAtom wrapper
+│   ├── bond.rs         # PyBond, PyBondOrder, PyBondStereo
+│   ├── molecule.rs     # PyMolecule wrapper + NumPy support
+│   ├── parsing.rs      # Parsing functions
+│   ├── writing.rs      # Writing functions
+│   └── iterators.rs    # Iterator wrappers
+├── python/sdfrust/     # Python package
+└── tests/              # pytest tests
 ```
 
 ### Key Types
@@ -31,11 +54,14 @@ src/
 - `Molecule`: Main container with atoms, bonds, and properties
 - `Atom`: Represents an atom with 3D coordinates, element, charge
 - `Bond`: Connects two atoms with order (single/double/triple/aromatic) and stereo
-- `BondOrder`: Enum for bond types (1-8 as per SDF spec)
-- `SdfParser<R>`: Streaming SDF parser from any `BufRead`
+- `BondOrder`: Enum for bond types (1-10 as per SDF spec, including V3000 types)
+- `SdfFormat`: Enum for V2000/V3000 format
+- `SdfParser<R>`: Streaming SDF V2000 parser from any `BufRead`
+- `SdfV3000Parser<R>`: Streaming SDF V3000 parser
 - `SdfIterator<R>`: Iterator over molecules in multi-molecule SDF files
 - `Mol2Parser<R>`: Streaming MOL2 parser from any `BufRead`
 - `Mol2Iterator<R>`: Iterator over molecules in multi-molecule MOL2 files
+- `StereoGroup`, `SGroup`, `Collection`: V3000-specific structures
 
 ### Design Patterns
 
@@ -47,34 +73,49 @@ src/
 ## Build Commands
 
 ```bash
-cargo build           # Build library
-cargo test            # Run all tests
-cargo test pubchem    # Run PubChem validation tests
-cargo doc --open      # Generate documentation
-cargo clippy          # Run linter
+# Rust library
+cargo build              # Build library
+cargo test               # Run all tests
+cargo test pubchem       # Run PubChem validation tests
+cargo doc --open         # Generate documentation
+cargo clippy             # Run linter
+cargo build --workspace  # Build all crates including Python bindings
+
+# Python bindings
+cd sdfrust-python
+uv venv .venv --python 3.11
+source .venv/bin/activate
+uv pip install maturin numpy pytest
+maturin develop --features numpy  # Build and install in dev mode
+pytest tests/ -v                   # Run Python tests
 ```
 
 ## Test Structure
 
 ```
-tests/
-├── sdf_parsing_tests.rs   # 32 unit tests for basic SDF functionality
-├── pubchem_tests.rs       # 27 tests with real PubChem molecules
-├── edge_case_tests.rs     # 41 edge case tests
-├── mol2_tests.rs          # 17 MOL2 integration tests
+tests/                         # Rust integration tests
+├── sdf_parsing_tests.rs       # Basic SDF V2000 functionality
+├── pubchem_tests.rs           # Real PubChem molecules
+├── edge_case_tests.rs         # Edge case handling
+├── mol2_tests.rs              # MOL2 integration tests
+├── sdf_v3000_tests.rs         # SDF V3000 tests
+├── descriptor_tests.rs        # Molecular descriptor tests
 └── test_data/
-    ├── aspirin.sdf        # PubChem CID 2244
-    ├── caffeine.sdf       # Hand-written test file
-    ├── caffeine_pubchem.sdf # PubChem CID 2519
-    ├── glucose.sdf        # PubChem CID 5988 (sucrose)
-    ├── galactose.sdf      # PubChem CID 5793
-    ├── acetaminophen.sdf  # PubChem CID 1983
-    ├── methionine.sdf     # PubChem CID 6137
-    ├── methane.mol2       # Simple MOL2 test file
-    └── benzene.mol2       # Aromatic MOL2 test file
+    ├── aspirin.sdf            # PubChem CID 2244
+    ├── caffeine.sdf           # Hand-written test file
+    ├── caffeine_pubchem.sdf   # PubChem CID 2519
+    ├── glucose.sdf            # PubChem CID 5988 (sucrose)
+    ├── galactose.sdf          # PubChem CID 5793
+    ├── acetaminophen.sdf      # PubChem CID 1983
+    ├── methionine.sdf         # PubChem CID 6137
+    ├── methane.mol2           # Simple MOL2 test file
+    └── benzene.mol2           # Aromatic MOL2 test file
+
+sdfrust-python/tests/          # Python tests
+└── test_basic.py              # 33 pytest tests
 ```
 
-Total: 129 tests (target was 100+)
+Total: 60 Rust unit tests + integration tests + 33 Python tests
 
 ## SDF Format Reference
 
@@ -181,4 +222,4 @@ bond_id atom1 atom2 type  <- type: 1, 2, 3, ar, am
 
 See [ROADMAP.md](ROADMAP.md) for detailed development phases.
 
-Current status: Phase 4 (MOL2 Parser) complete. Next: Phase 5 (SDF V3000).
+Current status: Phase 9 (Python Bindings) complete. Next: Phase 10 (Shared Traits).

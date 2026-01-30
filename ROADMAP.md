@@ -249,18 +249,77 @@ Descriptor functions are available via:
 
 ---
 
-## Phase 9: Python Bindings
+## Phase 9: Python Bindings ✅ COMPLETE
 
-**Status:** Planned
+**Status:** Implemented and tested
 
 ### Deliverables
-- [ ] PyO3 module setup
-- [ ] `PyMolecule` wrapper class
-- [ ] File I/O bindings
-- [ ] NumPy array support for coordinates
-- [ ] Iterator support for large files
-- [ ] Maturin build configuration
-- [ ] PyPI package publication
+- [x] PyO3 module setup with Maturin
+- [x] `PyMolecule` wrapper class with all properties and methods
+- [x] `PyAtom`, `PyBond`, `PyBondOrder`, `PyBondStereo` wrappers
+- [x] `PySdfFormat` for V2000/V3000 handling
+- [x] File I/O bindings for SDF and MOL2
+- [x] NumPy array support for coordinates (`get_coords_array`, `set_coords_array`)
+- [x] Atomic number array support (`get_atomic_numbers`)
+- [x] Iterator support for large files (`iter_sdf_file`, `iter_mol2_file`)
+- [x] All molecular descriptors exposed (MW, ring count, etc.)
+- [x] Maturin build configuration with workspace integration
+- [ ] PyPI package publication (pending)
+
+### Module Structure
+```
+sdfrust-python/
+├── Cargo.toml           # PyO3 + numpy dependencies
+├── pyproject.toml       # Maturin configuration
+├── src/
+│   ├── lib.rs           # Module registration
+│   ├── error.rs         # SdfError → Python exception mapping
+│   ├── atom.rs          # PyAtom wrapper
+│   ├── bond.rs          # PyBond, PyBondOrder, PyBondStereo
+│   ├── molecule.rs      # PyMolecule + NumPy support
+│   ├── parsing.rs       # Parsing functions
+│   ├── writing.rs       # Writing functions
+│   └── iterators.rs     # Iterator wrappers
+├── python/sdfrust/      # Python package
+│   ├── __init__.py      # Re-exports
+│   └── py.typed         # PEP 561 marker
+└── tests/
+    └── test_basic.py    # 33 pytest tests
+```
+
+### Test Coverage
+- 33 pytest tests covering:
+  - Version and module import
+  - Atom creation and methods
+  - Bond creation and methods
+  - Molecule creation, atoms, bonds, properties
+  - SDF string and file parsing
+  - MOL2 string and file parsing
+  - SDF writing
+  - Iterators
+  - Molecular descriptors
+  - Geometry operations
+  - NumPy coordinate arrays
+
+### Python API
+```python
+import sdfrust
+
+# Parse molecules
+mol = sdfrust.parse_sdf_file("molecule.sdf")
+mol = sdfrust.parse_mol2_file("molecule.mol2")
+
+# Access properties
+print(mol.name, mol.num_atoms, mol.formula())
+print(mol.molecular_weight(), mol.ring_count())
+
+# NumPy integration
+coords = mol.get_coords_array()  # (N, 3) array
+
+# Iterate over large files
+for mol in sdfrust.iter_sdf_file("large.sdf"):
+    process(mol)
+```
 
 ---
 
