@@ -6,7 +6,9 @@ use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;
 
-use sdfrust::{iter_mol2_file, iter_sdf_file, iter_sdf_v3000_file, Mol2Iterator, SdfIterator, SdfV3000Iterator};
+use sdfrust::{
+    iter_mol2_file, iter_sdf_file, iter_sdf_v3000_file, Mol2Iterator, SdfIterator, SdfV3000Iterator,
+};
 
 use crate::error::convert_error;
 use crate::molecule::PyMolecule;

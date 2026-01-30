@@ -498,7 +498,10 @@ impl PyMolecule {
     /// Returns:
     ///     A NumPy array of shape (N, 3) where N is the number of atoms.
     ///     Each row contains [x, y, z] coordinates in Angstroms.
-    pub fn get_coords_array<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, numpy::PyArray2<f64>>> {
+    pub fn get_coords_array<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> PyResult<Bound<'py, numpy::PyArray2<f64>>> {
         use numpy::PyArray2;
 
         // Convert to Vec<Vec<f64>> for from_vec2

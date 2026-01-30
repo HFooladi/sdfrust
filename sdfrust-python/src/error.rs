@@ -42,12 +42,14 @@ pub fn convert_error(err: SdfError) -> PyErr {
         SdfError::InvalidV3000Block(block) => {
             PyValueError::new_err(format!("Invalid V3000 block: {}", block))
         }
-        SdfError::InvalidV3000AtomLine { line, message } => {
-            PyValueError::new_err(format!("Invalid V3000 atom line at line {}: {}", line, message))
-        }
-        SdfError::InvalidV3000BondLine { line, message } => {
-            PyValueError::new_err(format!("Invalid V3000 bond line at line {}: {}", line, message))
-        }
+        SdfError::InvalidV3000AtomLine { line, message } => PyValueError::new_err(format!(
+            "Invalid V3000 atom line at line {}: {}",
+            line, message
+        )),
+        SdfError::InvalidV3000BondLine { line, message } => PyValueError::new_err(format!(
+            "Invalid V3000 bond line at line {}: {}",
+            line, message
+        )),
         SdfError::AtomIdNotFound { id } => {
             PyValueError::new_err(format!("Atom ID {} not found in V3000 ID mapping", id))
         }
