@@ -4,12 +4,13 @@
 //! from PubChem and calculated reference data.
 
 use sdfrust::{
-    parse_sdf_file, Atom, Bond, BondOrder, Molecule,
+    Atom, Bond, BondOrder, Molecule,
     descriptors::{
         atomic_weight, bond_type_counts, exact_mass, get_element, heavy_atom_count,
         molecular_weight, monoisotopic_mass, ring_atoms, ring_bonds, ring_count,
         rotatable_bond_count,
     },
+    parse_sdf_file,
 };
 
 // ============================================================
@@ -105,7 +106,11 @@ fn test_molecular_weight_aspirin() {
     let mol = parse_sdf_file("tests/test_data/aspirin.sdf").unwrap();
     let mw = molecular_weight(&mol).unwrap();
     // PubChem value: 180.16
-    assert!((mw - 180.16).abs() < 0.05, "Aspirin MW: expected ~180.16, got {}", mw);
+    assert!(
+        (mw - 180.16).abs() < 0.05,
+        "Aspirin MW: expected ~180.16, got {}",
+        mw
+    );
 }
 
 #[test]
@@ -113,7 +118,11 @@ fn test_molecular_weight_caffeine() {
     let mol = parse_sdf_file("tests/test_data/caffeine_pubchem.sdf").unwrap();
     let mw = molecular_weight(&mol).unwrap();
     // PubChem value: 194.19
-    assert!((mw - 194.19).abs() < 0.05, "Caffeine MW: expected ~194.19, got {}", mw);
+    assert!(
+        (mw - 194.19).abs() < 0.05,
+        "Caffeine MW: expected ~194.19, got {}",
+        mw
+    );
 }
 
 #[test]
@@ -158,7 +167,11 @@ fn test_exact_mass_aspirin() {
     let mol = parse_sdf_file("tests/test_data/aspirin.sdf").unwrap();
     let mass = exact_mass(&mol).unwrap();
     // PubChem value: 180.04225873
-    assert!((mass - 180.042).abs() < 0.01, "Aspirin exact mass: expected ~180.042, got {}", mass);
+    assert!(
+        (mass - 180.042).abs() < 0.01,
+        "Aspirin exact mass: expected ~180.042, got {}",
+        mass
+    );
 }
 
 #[test]
@@ -166,7 +179,11 @@ fn test_exact_mass_caffeine() {
     let mol = parse_sdf_file("tests/test_data/caffeine_pubchem.sdf").unwrap();
     let mass = exact_mass(&mol).unwrap();
     // PubChem value: 194.08037557
-    assert!((mass - 194.080).abs() < 0.01, "Caffeine exact mass: expected ~194.080, got {}", mass);
+    assert!(
+        (mass - 194.080).abs() < 0.01,
+        "Caffeine exact mass: expected ~194.080, got {}",
+        mass
+    );
 }
 
 #[test]
@@ -263,7 +280,8 @@ fn test_bond_type_counts_benzene_aromatic() {
         mol.atoms.push(Atom::new(i, "C", 0.0, 0.0, 0.0));
     }
     for i in 0..6 {
-        mol.bonds.push(Bond::new(i, (i + 1) % 6, BondOrder::Aromatic));
+        mol.bonds
+            .push(Bond::new(i, (i + 1) % 6, BondOrder::Aromatic));
     }
 
     let counts = bond_type_counts(&mol);
@@ -297,10 +315,12 @@ fn test_ring_count_benzene() {
     let mut mol = Molecule::new("benzene");
     for i in 0..6 {
         let angle = std::f64::consts::PI * 2.0 * i as f64 / 6.0;
-        mol.atoms.push(Atom::new(i, "C", angle.cos(), angle.sin(), 0.0));
+        mol.atoms
+            .push(Atom::new(i, "C", angle.cos(), angle.sin(), 0.0));
     }
     for i in 0..6 {
-        mol.bonds.push(Bond::new(i, (i + 1) % 6, BondOrder::Aromatic));
+        mol.bonds
+            .push(Bond::new(i, (i + 1) % 6, BondOrder::Aromatic));
     }
 
     assert_eq!(ring_count(&mol), 1);
@@ -368,7 +388,8 @@ fn test_ring_count_via_molecule_method() {
         mol.atoms.push(Atom::new(i, "C", 0.0, 0.0, 0.0));
     }
     for i in 0..6 {
-        mol.bonds.push(Bond::new(i, (i + 1) % 6, BondOrder::Aromatic));
+        mol.bonds
+            .push(Bond::new(i, (i + 1) % 6, BondOrder::Aromatic));
     }
 
     assert_eq!(mol.ring_count(), 1);
@@ -378,7 +399,11 @@ fn test_ring_count_via_molecule_method() {
 fn test_ring_count_caffeine() {
     // Caffeine has 2 fused rings (purine scaffold)
     let mol = parse_sdf_file("tests/test_data/caffeine_pubchem.sdf").unwrap();
-    assert_eq!(ring_count(&mol), 2, "Caffeine should have 2 rings (purine scaffold)");
+    assert_eq!(
+        ring_count(&mol),
+        2,
+        "Caffeine should have 2 rings (purine scaffold)"
+    );
 }
 
 // ============================================================
@@ -392,12 +417,16 @@ fn test_ring_atoms_benzene() {
         mol.atoms.push(Atom::new(i, "C", 0.0, 0.0, 0.0));
     }
     for i in 0..6 {
-        mol.bonds.push(Bond::new(i, (i + 1) % 6, BondOrder::Aromatic));
+        mol.bonds
+            .push(Bond::new(i, (i + 1) % 6, BondOrder::Aromatic));
     }
 
     let in_ring = ring_atoms(&mol);
     assert_eq!(in_ring.len(), 6);
-    assert!(in_ring.iter().all(|&r| r), "All benzene atoms should be in ring");
+    assert!(
+        in_ring.iter().all(|&r| r),
+        "All benzene atoms should be in ring"
+    );
 }
 
 #[test]
@@ -412,7 +441,8 @@ fn test_ring_atoms_toluene_like() {
     mol.atoms.push(Atom::new(6, "C", 2.0, 0.0, 0.0));
 
     for i in 0..6 {
-        mol.bonds.push(Bond::new(i, (i + 1) % 6, BondOrder::Aromatic));
+        mol.bonds
+            .push(Bond::new(i, (i + 1) % 6, BondOrder::Aromatic));
     }
     mol.bonds.push(Bond::new(0, 6, BondOrder::Single));
 
@@ -433,12 +463,16 @@ fn test_ring_bonds_benzene() {
         mol.atoms.push(Atom::new(i, "C", 0.0, 0.0, 0.0));
     }
     for i in 0..6 {
-        mol.bonds.push(Bond::new(i, (i + 1) % 6, BondOrder::Aromatic));
+        mol.bonds
+            .push(Bond::new(i, (i + 1) % 6, BondOrder::Aromatic));
     }
 
     let in_ring = ring_bonds(&mol);
     assert_eq!(in_ring.len(), 6);
-    assert!(in_ring.iter().all(|&r| r), "All benzene bonds should be in ring");
+    assert!(
+        in_ring.iter().all(|&r| r),
+        "All benzene bonds should be in ring"
+    );
 }
 
 #[test]
@@ -450,7 +484,8 @@ fn test_ring_bonds_toluene_like() {
     mol.atoms.push(Atom::new(6, "C", 2.0, 0.0, 0.0));
 
     for i in 0..6 {
-        mol.bonds.push(Bond::new(i, (i + 1) % 6, BondOrder::Aromatic));
+        mol.bonds
+            .push(Bond::new(i, (i + 1) % 6, BondOrder::Aromatic));
     }
     mol.bonds.push(Bond::new(0, 6, BondOrder::Single)); // Bond 6: exocyclic
 
@@ -471,7 +506,8 @@ fn test_is_atom_in_ring_via_molecule_method() {
         mol.atoms.push(Atom::new(i, "C", 0.0, 0.0, 0.0));
     }
     for i in 0..6 {
-        mol.bonds.push(Bond::new(i, (i + 1) % 6, BondOrder::Aromatic));
+        mol.bonds
+            .push(Bond::new(i, (i + 1) % 6, BondOrder::Aromatic));
     }
 
     for i in 0..6 {
@@ -488,7 +524,8 @@ fn test_is_bond_in_ring_via_molecule_method() {
         mol.atoms.push(Atom::new(i, "C", 0.0, 0.0, 0.0));
     }
     for i in 0..6 {
-        mol.bonds.push(Bond::new(i, (i + 1) % 6, BondOrder::Aromatic));
+        mol.bonds
+            .push(Bond::new(i, (i + 1) % 6, BondOrder::Aromatic));
     }
 
     for i in 0..6 {
@@ -510,7 +547,8 @@ fn test_rotatable_bond_count_benzene() {
         mol.atoms.push(Atom::new(i, "C", 0.0, 0.0, 0.0));
     }
     for i in 0..6 {
-        mol.bonds.push(Bond::new(i, (i + 1) % 6, BondOrder::Aromatic));
+        mol.bonds
+            .push(Bond::new(i, (i + 1) % 6, BondOrder::Aromatic));
     }
 
     assert_eq!(rotatable_bond_count(&mol), 0);
@@ -545,14 +583,22 @@ fn test_rotatable_bond_count_aspirin() {
     let mol = parse_sdf_file("tests/test_data/aspirin.sdf").unwrap();
     // PubChem value: 3
     // RDKit definition: single, non-ring, both atoms non-terminal (heavy_degree > 1)
-    assert_eq!(rotatable_bond_count(&mol), 3, "Aspirin should have 3 rotatable bonds");
+    assert_eq!(
+        rotatable_bond_count(&mol),
+        3,
+        "Aspirin should have 3 rotatable bonds"
+    );
 }
 
 #[test]
 fn test_rotatable_bond_count_caffeine() {
     let mol = parse_sdf_file("tests/test_data/caffeine_pubchem.sdf").unwrap();
     // PubChem value: 0 (rigid fused ring system)
-    assert_eq!(rotatable_bond_count(&mol), 0, "Caffeine should have 0 rotatable bonds");
+    assert_eq!(
+        rotatable_bond_count(&mol),
+        0,
+        "Caffeine should have 0 rotatable bonds"
+    );
 }
 
 #[test]
@@ -627,7 +673,11 @@ fn test_descriptors_with_deuterium() {
 
     let mw = molecular_weight(&mol).unwrap();
     // D2O: 2*2.014 + 15.999 ≈ 20.027
-    assert!((mw - 20.027).abs() < 0.01, "D2O MW: expected ~20.027, got {}", mw);
+    assert!(
+        (mw - 20.027).abs() < 0.01,
+        "D2O MW: expected ~20.027, got {}",
+        mw
+    );
 
     // Deuterium counts as hydrogen for heavy atom count
     assert_eq!(heavy_atom_count(&mol), 1);
@@ -661,7 +711,11 @@ fn test_methionine_descriptors() {
     // Methionine: C5H11NO2S
     // MW ≈ 149.21
     let mw = mol.molecular_weight().unwrap();
-    assert!((mw - 149.2).abs() < 1.0, "Methionine MW: expected ~149.2, got {}", mw);
+    assert!(
+        (mw - 149.2).abs() < 1.0,
+        "Methionine MW: expected ~149.2, got {}",
+        mw
+    );
 
     // Contains S
     let has_sulfur = mol.atoms.iter().any(|a| a.element == "S");
@@ -675,5 +729,9 @@ fn test_galactose_descriptors() {
     // Galactose: C6H12O6
     // MW ≈ 180.16
     let mw = mol.molecular_weight().unwrap();
-    assert!((mw - 180.16).abs() < 1.0, "Galactose MW: expected ~180.16, got {}", mw);
+    assert!(
+        (mw - 180.16).abs() < 1.0,
+        "Galactose MW: expected ~180.16, got {}",
+        mw
+    );
 }

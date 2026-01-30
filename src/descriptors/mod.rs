@@ -33,7 +33,7 @@ pub mod molecular;
 pub mod topological;
 
 // Re-export element data functions
-pub use elements::{atomic_weight, get_element, monoisotopic_mass, ElementData};
+pub use elements::{ElementData, atomic_weight, get_element, monoisotopic_mass};
 
 // Re-export molecular descriptor functions
 pub use molecular::{bond_type_counts, exact_mass, heavy_atom_count, molecular_weight};

@@ -482,7 +482,10 @@ mod tests {
         let mol = make_benzene();
         let in_ring = ring_atoms(&mol);
         assert_eq!(in_ring.len(), 6);
-        assert!(in_ring.iter().all(|&r| r), "All atoms in benzene should be in ring");
+        assert!(
+            in_ring.iter().all(|&r| r),
+            "All atoms in benzene should be in ring"
+        );
     }
 
     #[test]
@@ -500,7 +503,10 @@ mod tests {
         let mol = make_benzene();
         let in_ring = ring_bonds(&mol);
         assert_eq!(in_ring.len(), 6);
-        assert!(in_ring.iter().all(|&r| r), "All bonds in benzene should be in ring");
+        assert!(
+            in_ring.iter().all(|&r| r),
+            "All bonds in benzene should be in ring"
+        );
     }
 
     #[test]
