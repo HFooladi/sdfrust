@@ -409,6 +409,7 @@
 pub mod atom;
 pub mod bond;
 pub mod collection;
+pub mod descriptors;
 pub mod error;
 pub mod molecule;
 pub mod parser;
@@ -455,3 +456,6 @@ pub use writer::{
     write_sdf_v3000_file, write_sdf_v3000_file_multi, write_sdf_v3000_multi,
     write_sdf_v3000_string,
 };
+
+// Re-export descriptors module (access via sdfrust::descriptors::*)
+// For direct access: use sdfrust::descriptors::{molecular_weight, exact_mass, ...}

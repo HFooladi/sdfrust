@@ -297,6 +297,89 @@ impl Molecule {
     pub fn bonds_by_order(&self, order: BondOrder) -> Vec<&Bond> {
         self.bonds.iter().filter(|b| b.order == order).collect()
     }
+
+    // ============================================================
+    // Descriptor convenience methods
+    // ============================================================
+
+    /// Calculate the molecular weight (sum of atomic weights).
+    ///
+    /// Uses standard atomic weights (IUPAC 2021) for each element.
+    /// Returns `None` if any atom has an unknown element.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use sdfrust::{Molecule, Atom};
+    ///
+    /// let mut mol = Molecule::new("water");
+    /// mol.atoms.push(Atom::new(0, "O", 0.0, 0.0, 0.0));
+    /// mol.atoms.push(Atom::new(1, "H", 1.0, 0.0, 0.0));
+    /// mol.atoms.push(Atom::new(2, "H", -0.3, 0.95, 0.0));
+    ///
+    /// let mw = mol.molecular_weight().unwrap();
+    /// assert!((mw - 18.015).abs() < 0.01);
+    /// ```
+    pub fn molecular_weight(&self) -> Option<f64> {
+        crate::descriptors::molecular::molecular_weight(self)
+    }
+
+    /// Calculate the exact (monoisotopic) mass.
+    ///
+    /// Uses the mass of the most abundant isotope for each element.
+    /// Returns `None` if any atom has an unknown element.
+    pub fn exact_mass(&self) -> Option<f64> {
+        crate::descriptors::molecular::exact_mass(self)
+    }
+
+    /// Count non-hydrogen atoms (heavy atoms).
+    ///
+    /// Heavy atoms are all atoms except hydrogen (H), deuterium (D), and tritium (T).
+    pub fn heavy_atom_count(&self) -> usize {
+        crate::descriptors::molecular::heavy_atom_count(self)
+    }
+
+    /// Count bonds by bond order.
+    ///
+    /// Returns a HashMap mapping each BondOrder to its count.
+    pub fn bond_type_counts(&self) -> HashMap<BondOrder, usize> {
+        crate::descriptors::molecular::bond_type_counts(self)
+    }
+
+    /// Count the number of rings in the molecule.
+    ///
+    /// Uses the Euler characteristic formula: rings = bonds - atoms + components.
+    pub fn ring_count(&self) -> usize {
+        crate::descriptors::topological::ring_count(self)
+    }
+
+    /// Check if an atom at the given index is in a ring.
+    ///
+    /// Returns `false` if the index is out of bounds.
+    pub fn is_atom_in_ring(&self, idx: usize) -> bool {
+        if idx >= self.atoms.len() {
+            return false;
+        }
+        crate::descriptors::topological::ring_atoms(self)[idx]
+    }
+
+    /// Check if a bond at the given index is in a ring.
+    ///
+    /// Returns `false` if the index is out of bounds.
+    pub fn is_bond_in_ring(&self, idx: usize) -> bool {
+        if idx >= self.bonds.len() {
+            return false;
+        }
+        crate::descriptors::topological::ring_bonds(self)[idx]
+    }
+
+    /// Count rotatable bonds.
+    ///
+    /// A bond is rotatable if it is a single bond, not in a ring,
+    /// not terminal, and doesn't involve hydrogen atoms.
+    pub fn rotatable_bond_count(&self) -> usize {
+        crate::descriptors::topological::rotatable_bond_count(self)
+    }
 }
 
 impl Default for Molecule {

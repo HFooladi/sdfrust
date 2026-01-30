@@ -215,18 +215,37 @@ open target/criterion/report/index.html
 
 ---
 
-## Phase 8: Basic Descriptors
+## Phase 8: Basic Descriptors ✅ COMPLETE
 
-**Status:** Planned
+**Status:** Implemented and tested
 
 ### Deliverables
-- [ ] Molecular weight calculation
-- [ ] Exact mass calculation
-- [ ] Atom count by element
-- [ ] Bond count by type
-- [ ] Heavy atom count
-- [ ] Rotatable bond count (basic)
-- [ ] Ring detection (basic)
+- [x] Molecular weight calculation (IUPAC 2021 atomic weights)
+- [x] Exact mass calculation (monoisotopic masses)
+- [x] Atom count by element (via `element_counts()`)
+- [x] Bond count by type (`bond_type_counts()`)
+- [x] Heavy atom count
+- [x] Rotatable bond count (RDKit-compatible SMARTS definition)
+- [x] Ring detection (DFS-based cycle detection)
+
+### Module Structure
+```
+src/descriptors/
+├── mod.rs           # Module exports
+├── elements.rs      # Element data table (~30 common elements)
+├── molecular.rs     # molecular_weight, exact_mass, heavy_atom_count
+└── topological.rs   # ring_count, ring_atoms, ring_bonds, rotatable_bond_count
+```
+
+### Test Coverage
+- 54 integration tests in `tests/descriptor_tests.rs`
+- 39 unit tests in descriptor modules
+- Validated against PubChem reference data (aspirin, caffeine, glucose, etc.)
+
+### API
+Descriptor functions are available via:
+- `sdfrust::descriptors::*` module functions
+- Convenience methods on `Molecule` struct (e.g., `mol.molecular_weight()`)
 
 ---
 
@@ -308,7 +327,7 @@ Following pdbrust conventions:
 |---------|--------|-------------|
 | 0.1.0   | 1-2    | SDF V2000 read/write ✅ |
 | 0.2.0   | 3-7    | Testing, MOL2, benchmarks, SDF V3000 ✅ |
-| 0.3.0   | 8      | Basic descriptors |
+| 0.3.0   | 8      | Basic descriptors ✅ |
 | 0.4.0   | 9      | Python bindings |
 | 1.0.0   | 10-11  | Stable API, advanced features |
 

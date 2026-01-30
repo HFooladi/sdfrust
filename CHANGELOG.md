@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-01-30
+
+### Added
+
+- **Basic Molecular Descriptors** (`src/descriptors/` module)
+  - `molecular_weight()` - Calculate molecular weight using IUPAC 2021 atomic weights
+  - `exact_mass()` - Calculate monoisotopic mass
+  - `heavy_atom_count()` - Count non-hydrogen atoms
+  - `bond_type_counts()` - Count bonds by type (single, double, aromatic, etc.)
+  - `ring_count()` - Count rings using Euler characteristic formula
+  - `ring_atoms()` / `ring_bonds()` - Identify atoms and bonds in rings
+  - `rotatable_bond_count()` - Count rotatable bonds (RDKit-compatible definition)
+
+- **Element Data Table** (`src/descriptors/elements.rs`)
+  - ~30 common elements with atomic weights and monoisotopic masses
+  - `get_element()`, `atomic_weight()`, `monoisotopic_mass()` functions
+  - Support for deuterium (D) and tritium (T)
+
+- **Convenience Methods on Molecule**
+  - `mol.molecular_weight()`, `mol.exact_mass()`
+  - `mol.heavy_atom_count()`, `mol.bond_type_counts()`
+  - `mol.ring_count()`, `mol.rotatable_bond_count()`
+  - `mol.is_atom_in_ring(idx)`, `mol.is_bond_in_ring(idx)`
+
+- **Comprehensive Test Suite**
+  - 54 descriptor integration tests
+  - Validated against PubChem reference data (aspirin, caffeine, etc.)
+
 ## [0.2.0] - 2025-01-29
 
 ### Added
@@ -70,6 +98,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `formula()`, `centroid()`, `translate()`, `center()`
   - `neighbors()`, `bonds_for_atom()`, `element_counts()`
 
-[Unreleased]: https://github.com/HFooladi/sdfrust/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/HFooladi/sdfrust/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/HFooladi/sdfrust/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/HFooladi/sdfrust/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/HFooladi/sdfrust/releases/tag/v0.1.0
