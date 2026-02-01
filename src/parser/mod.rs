@@ -3,9 +3,11 @@ pub mod sdf;
 pub mod sdf_v3000;
 
 pub use sdf::{
-    SdfIterator, SdfParser, detect_sdf_format, iter_sdf_file, parse_sdf_auto_file,
-    parse_sdf_auto_file_multi, parse_sdf_auto_string, parse_sdf_auto_string_multi, parse_sdf_file,
-    parse_sdf_file_multi, parse_sdf_string, parse_sdf_string_multi,
+    AutoIterator, FileFormat, SdfIterator, SdfParser, detect_format, detect_sdf_format,
+    iter_auto_file, iter_sdf_file, parse_auto_file, parse_auto_file_multi, parse_auto_string,
+    parse_auto_string_multi, parse_sdf_auto_file, parse_sdf_auto_file_multi, parse_sdf_auto_string,
+    parse_sdf_auto_string_multi, parse_sdf_file, parse_sdf_file_multi, parse_sdf_string,
+    parse_sdf_string_multi,
 };
 
 pub use mol2::{

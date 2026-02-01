@@ -1,6 +1,7 @@
 use sdfrust::{
-    Atom, Bond, BondOrder, BondStereo, Molecule, parse_sdf_file, parse_sdf_string,
-    parse_sdf_string_multi, write_sdf_string,
+    Atom, Bond, BondOrder, BondStereo, FileFormat, Molecule, detect_format, iter_auto_file,
+    parse_auto_file, parse_auto_file_multi, parse_auto_string, parse_auto_string_multi,
+    parse_sdf_file, parse_sdf_string, parse_sdf_string_multi, write_sdf_string,
 };
 
 const METHANE_SDF: &str = r#"methane
@@ -542,4 +543,183 @@ fn test_parse_caffeine_from_file() {
 
     // Verify our formula calculation matches PubChem
     assert_eq!(mol.formula(), "C8H10N4O2");
+}
+
+// ============================================================================
+// Auto-detection tests (FileFormat, detect_format, parse_auto_*)
+// ============================================================================
+
+const MOL2_CONTENT: &str = r#"@<TRIPOS>MOLECULE
+methane
+ 5 4 0 0 0
+SMALL
+NO_CHARGES
+
+@<TRIPOS>ATOM
+      1 C1          0.0000    0.0000    0.0000 C.3       1 MOL       0.0000
+      2 H1          0.6289    0.6289    0.6289 H         1 MOL       0.0000
+      3 H2         -0.6289   -0.6289    0.6289 H         1 MOL       0.0000
+      4 H3         -0.6289    0.6289   -0.6289 H         1 MOL       0.0000
+      5 H4          0.6289   -0.6289   -0.6289 H         1 MOL       0.0000
+@<TRIPOS>BOND
+     1     1     2 1
+     2     1     3 1
+     3     1     4 1
+     4     1     5 1
+"#;
+
+const V3000_CONTENT: &str = r#"methane
+  sdfrust 3D
+
+  0  0  0     0  0            999 V3000
+M  V30 BEGIN CTAB
+M  V30 COUNTS 5 4 0 0 0
+M  V30 BEGIN ATOM
+M  V30 1 C 0.0000 0.0000 0.0000 0
+M  V30 2 H 0.6289 0.6289 0.6289 0
+M  V30 3 H -0.6289 -0.6289 0.6289 0
+M  V30 4 H -0.6289 0.6289 -0.6289 0
+M  V30 5 H 0.6289 -0.6289 -0.6289 0
+M  V30 END ATOM
+M  V30 BEGIN BOND
+M  V30 1 1 1 2
+M  V30 2 1 1 3
+M  V30 3 1 1 4
+M  V30 4 1 1 5
+M  V30 END BOND
+M  V30 END CTAB
+M  END
+$$$$
+"#;
+
+#[test]
+fn test_detect_format_mol2() {
+    assert_eq!(detect_format(MOL2_CONTENT), FileFormat::Mol2);
+}
+
+#[test]
+fn test_detect_format_v3000() {
+    assert_eq!(detect_format(V3000_CONTENT), FileFormat::SdfV3000);
+}
+
+#[test]
+fn test_detect_format_v2000() {
+    assert_eq!(detect_format(METHANE_SDF), FileFormat::SdfV2000);
+    assert_eq!(detect_format(ETHANOL_SDF), FileFormat::SdfV2000);
+    assert_eq!(detect_format(BENZENE_SDF), FileFormat::SdfV2000);
+}
+
+#[test]
+fn test_detect_format_mol2_marker_deep() {
+    // Test that we detect MOL2 even if @<TRIPOS> appears after some lines
+    let content = "some header\nanother line\n@<TRIPOS>MOLECULE\ntest\n";
+    assert_eq!(detect_format(content), FileFormat::Mol2);
+}
+
+#[test]
+fn test_detect_format_empty_defaults_v2000() {
+    // Empty or minimal content should default to V2000
+    assert_eq!(detect_format(""), FileFormat::SdfV2000);
+    assert_eq!(detect_format("test"), FileFormat::SdfV2000);
+}
+
+#[test]
+fn test_file_format_display() {
+    assert_eq!(format!("{}", FileFormat::SdfV2000), "sdf_v2000");
+    assert_eq!(format!("{}", FileFormat::SdfV3000), "sdf_v3000");
+    assert_eq!(format!("{}", FileFormat::Mol2), "mol2");
+}
+
+#[test]
+fn test_parse_auto_string_v2000() {
+    let mol = parse_auto_string(METHANE_SDF).unwrap();
+    assert_eq!(mol.name, "methane");
+    assert_eq!(mol.atom_count(), 5);
+    assert_eq!(mol.bond_count(), 4);
+}
+
+#[test]
+fn test_parse_auto_string_v3000() {
+    let mol = parse_auto_string(V3000_CONTENT).unwrap();
+    assert_eq!(mol.name, "methane");
+    assert_eq!(mol.atom_count(), 5);
+    assert_eq!(mol.bond_count(), 4);
+}
+
+#[test]
+fn test_parse_auto_string_mol2() {
+    let mol = parse_auto_string(MOL2_CONTENT).unwrap();
+    assert_eq!(mol.name, "methane");
+    assert_eq!(mol.atom_count(), 5);
+    assert_eq!(mol.bond_count(), 4);
+}
+
+#[test]
+fn test_parse_auto_string_multi_v2000() {
+    let multi_sdf = format!("{}{}", METHANE_SDF, ETHANOL_SDF);
+    let mols = parse_auto_string_multi(&multi_sdf).unwrap();
+    assert_eq!(mols.len(), 2);
+    assert_eq!(mols[0].name, "methane");
+    assert_eq!(mols[1].name, "ethanol");
+}
+
+#[test]
+fn test_parse_auto_string_multi_mol2() {
+    let multi_mol2 = format!("{}{}", MOL2_CONTENT, MOL2_CONTENT);
+    let mols = parse_auto_string_multi(&multi_mol2).unwrap();
+    assert_eq!(mols.len(), 2);
+    assert_eq!(mols[0].name, "methane");
+    assert_eq!(mols[1].name, "methane");
+}
+
+#[test]
+fn test_parse_auto_file_v2000() {
+    let mol = parse_auto_file("tests/test_data/aspirin.sdf").unwrap();
+    assert_eq!(mol.name, "2244");
+    assert_eq!(mol.atom_count(), 21);
+}
+
+#[test]
+fn test_parse_auto_file_v3000() {
+    let mol = parse_auto_file("tests/test_data/v3000_methane.sdf").unwrap();
+    assert_eq!(mol.name, "methane");
+    assert_eq!(mol.atom_count(), 5);
+}
+
+#[test]
+fn test_parse_auto_file_mol2() {
+    let mol = parse_auto_file("tests/test_data/methane.mol2").unwrap();
+    assert_eq!(mol.name, "methane");
+    assert_eq!(mol.atom_count(), 5);
+}
+
+#[test]
+fn test_parse_auto_file_multi_v2000() {
+    let mols = parse_auto_file_multi("tests/test_data/caffeine_pubchem.sdf").unwrap();
+    assert!(!mols.is_empty());
+    assert_eq!(mols[0].name, "2519");
+}
+
+#[test]
+fn test_iter_auto_file_v2000() {
+    let iter = iter_auto_file("tests/test_data/aspirin.sdf").unwrap();
+    let mols: Vec<_> = iter.collect::<Result<Vec<_>, _>>().unwrap();
+    assert_eq!(mols.len(), 1);
+    assert_eq!(mols[0].name, "2244");
+}
+
+#[test]
+fn test_iter_auto_file_mol2() {
+    let iter = iter_auto_file("tests/test_data/methane.mol2").unwrap();
+    let mols: Vec<_> = iter.collect::<Result<Vec<_>, _>>().unwrap();
+    assert_eq!(mols.len(), 1);
+    assert_eq!(mols[0].name, "methane");
+}
+
+#[test]
+fn test_iter_auto_file_v3000() {
+    let iter = iter_auto_file("tests/test_data/v3000_benzene.sdf").unwrap();
+    let mols: Vec<_> = iter.collect::<Result<Vec<_>, _>>().unwrap();
+    assert!(!mols.is_empty());
+    assert_eq!(mols[0].name, "benzene");
 }

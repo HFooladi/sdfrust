@@ -70,7 +70,7 @@ fn _sdfrust(m: &Bound<'_, PyModule>) -> PyResult<()> {
         m
     )?)?;
 
-    // SDF auto-detection parsing functions
+    // SDF auto-detection parsing functions (V2000/V3000 only)
     m.add_function(wrap_pyfunction!(parsing::py_parse_sdf_auto_file, m)?)?;
     m.add_function(wrap_pyfunction!(parsing::py_parse_sdf_auto_string, m)?)?;
     m.add_function(wrap_pyfunction!(parsing::py_parse_sdf_auto_file_multi, m)?)?;
@@ -78,6 +78,13 @@ fn _sdfrust(m: &Bound<'_, PyModule>) -> PyResult<()> {
         parsing::py_parse_sdf_auto_string_multi,
         m
     )?)?;
+
+    // Unified auto-detection functions (SDF V2000, V3000, and MOL2)
+    m.add_function(wrap_pyfunction!(parsing::py_detect_format, m)?)?;
+    m.add_function(wrap_pyfunction!(parsing::py_parse_auto_file, m)?)?;
+    m.add_function(wrap_pyfunction!(parsing::py_parse_auto_string, m)?)?;
+    m.add_function(wrap_pyfunction!(parsing::py_parse_auto_file_multi, m)?)?;
+    m.add_function(wrap_pyfunction!(parsing::py_parse_auto_string_multi, m)?)?;
 
     // MOL2 parsing functions
     m.add_function(wrap_pyfunction!(parsing::py_parse_mol2_file, m)?)?;

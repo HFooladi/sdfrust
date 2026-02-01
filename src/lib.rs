@@ -433,6 +433,12 @@ pub use parser::{
     parse_sdf_file_multi, parse_sdf_string, parse_sdf_string_multi,
 };
 
+// Re-export unified auto-detection functions and types
+pub use parser::{
+    AutoIterator, FileFormat, detect_format, iter_auto_file, parse_auto_file,
+    parse_auto_file_multi, parse_auto_string, parse_auto_string_multi,
+};
+
 // Re-export V3000 parser functions
 pub use parser::{
     SdfV3000Iterator, SdfV3000Parser, iter_sdf_v3000_file, parse_sdf_v3000_file,

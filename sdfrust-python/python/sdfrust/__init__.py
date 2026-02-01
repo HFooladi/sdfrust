@@ -44,11 +44,17 @@ from sdfrust._sdfrust import (
     parse_sdf_v3000_string,
     parse_sdf_v3000_file_multi,
     parse_sdf_v3000_string_multi,
-    # SDF auto-detection parsing
+    # SDF auto-detection parsing (V2000/V3000)
     parse_sdf_auto_file,
     parse_sdf_auto_string,
     parse_sdf_auto_file_multi,
     parse_sdf_auto_string_multi,
+    # Unified auto-detection (SDF V2000, V3000, MOL2)
+    detect_format,
+    parse_auto_file,
+    parse_auto_string,
+    parse_auto_file_multi,
+    parse_auto_string_multi,
     # MOL2 parsing
     parse_mol2_file,
     parse_mol2_string,
@@ -98,11 +104,17 @@ __all__ = [
     "parse_sdf_v3000_string",
     "parse_sdf_v3000_file_multi",
     "parse_sdf_v3000_string_multi",
-    # SDF auto-detection parsing
+    # SDF auto-detection parsing (V2000/V3000)
     "parse_sdf_auto_file",
     "parse_sdf_auto_string",
     "parse_sdf_auto_file_multi",
     "parse_sdf_auto_string_multi",
+    # Unified auto-detection (SDF V2000, V3000, MOL2)
+    "detect_format",
+    "parse_auto_file",
+    "parse_auto_string",
+    "parse_auto_file_multi",
+    "parse_auto_string_multi",
     # MOL2 parsing
     "parse_mol2_file",
     "parse_mol2_string",

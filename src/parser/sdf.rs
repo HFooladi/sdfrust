@@ -6,6 +6,30 @@ use crate::bond::{Bond, BondOrder, BondStereo};
 use crate::error::{Result, SdfError};
 use crate::molecule::{Molecule, SdfFormat};
 
+/// Detected file format for molecular structure files.
+///
+/// This enum represents all supported file formats for automatic detection
+/// and parsing. It is used by [`detect_format`] and the `parse_auto_*` functions.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FileFormat {
+    /// SDF V2000 format (traditional SDF, up to 999 atoms/bonds)
+    SdfV2000,
+    /// SDF V3000 format (extended format, no atom/bond limits)
+    SdfV3000,
+    /// TRIPOS MOL2 format
+    Mol2,
+}
+
+impl std::fmt::Display for FileFormat {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            FileFormat::SdfV2000 => write!(f, "sdf_v2000"),
+            FileFormat::SdfV3000 => write!(f, "sdf_v3000"),
+            FileFormat::Mol2 => write!(f, "mol2"),
+        }
+    }
+}
+
 /// SDF V2000 format parser.
 pub struct SdfParser<R> {
     reader: R,
@@ -574,6 +598,171 @@ pub fn parse_sdf_auto_file_multi<P: AsRef<std::path::Path>>(path: P) -> Result<V
             iter.collect()
         }
         SdfFormat::V3000 => super::sdf_v3000::parse_sdf_v3000_file_multi(path),
+    }
+}
+
+// ============================================================================
+// Unified Auto-Detection (SDF V2000, V3000, MOL2)
+// ============================================================================
+
+/// Detects the format of a molecular structure file from its content.
+///
+/// This function examines the content to determine whether it is:
+/// - MOL2 format (contains `@<TRIPOS>` marker)
+/// - SDF V3000 format (contains `V3000` on the counts line)
+/// - SDF V2000 format (default)
+///
+/// Detection order: MOL2 → V3000 → V2000 (default)
+///
+/// # Example
+///
+/// ```rust
+/// use sdfrust::detect_format;
+/// use sdfrust::FileFormat;
+///
+/// let mol2_content = "@<TRIPOS>MOLECULE\ntest\n";
+/// assert_eq!(detect_format(mol2_content), FileFormat::Mol2);
+///
+/// let v2000_content = "test\n\n\n  5  4  0  0  0  0  0  0  0  0999 V2000\n";
+/// assert_eq!(detect_format(v2000_content), FileFormat::SdfV2000);
+/// ```
+pub fn detect_format(content: &str) -> FileFormat {
+    // Check first ~100 lines for @<TRIPOS> marker (MOL2)
+    for line in content.lines().take(100) {
+        if line.starts_with("@<TRIPOS>") {
+            return FileFormat::Mol2;
+        }
+    }
+
+    // Check line 4 for V3000 marker
+    let lines: Vec<&str> = content.lines().take(5).collect();
+    if lines.len() >= 4 && lines[3].contains("V3000") {
+        return FileFormat::SdfV3000;
+    }
+
+    // Default to V2000
+    FileFormat::SdfV2000
+}
+
+/// Parses a single molecule from a string with automatic format detection.
+///
+/// This function automatically detects whether the content is SDF V2000, V3000,
+/// or MOL2 format and uses the appropriate parser.
+///
+/// # Example
+///
+/// ```rust,ignore
+/// use sdfrust::parse_auto_string;
+///
+/// let mol = parse_auto_string(sdf_content).unwrap();
+/// assert_eq!(mol.name, "methane");
+/// ```
+pub fn parse_auto_string(content: &str) -> Result<Molecule> {
+    match detect_format(content) {
+        FileFormat::SdfV2000 => parse_sdf_string(content),
+        FileFormat::SdfV3000 => super::sdf_v3000::parse_sdf_v3000_string(content),
+        FileFormat::Mol2 => super::mol2::parse_mol2_string(content),
+    }
+}
+
+/// Parses multiple molecules from a string with automatic format detection.
+///
+/// This function automatically detects whether the content is SDF V2000, V3000,
+/// or MOL2 format and uses the appropriate parser.
+pub fn parse_auto_string_multi(content: &str) -> Result<Vec<Molecule>> {
+    match detect_format(content) {
+        FileFormat::SdfV2000 => parse_sdf_string_multi(content),
+        FileFormat::SdfV3000 => super::sdf_v3000::parse_sdf_v3000_string_multi(content),
+        FileFormat::Mol2 => super::mol2::parse_mol2_string_multi(content),
+    }
+}
+
+/// Parses a single molecule from a file with automatic format detection.
+///
+/// This function reads the file, detects whether it is SDF V2000, V3000,
+/// or MOL2 format, and uses the appropriate parser.
+///
+/// # Example
+///
+/// ```rust,ignore
+/// use sdfrust::parse_auto_file;
+///
+/// // Works with any supported format
+/// let mol = parse_auto_file("molecule.sdf")?;  // SDF V2000 or V3000
+/// let mol = parse_auto_file("molecule.mol2")?; // MOL2
+/// ```
+pub fn parse_auto_file<P: AsRef<std::path::Path>>(path: P) -> Result<Molecule> {
+    let content = std::fs::read_to_string(&path)?;
+    match detect_format(&content) {
+        FileFormat::SdfV2000 => {
+            let cursor = std::io::Cursor::new(content);
+            let reader = std::io::BufReader::new(cursor);
+            let mut parser = SdfParser::new(reader);
+            parser.parse_molecule()?.ok_or(SdfError::EmptyFile)
+        }
+        FileFormat::SdfV3000 => super::sdf_v3000::parse_sdf_v3000_file(path),
+        FileFormat::Mol2 => super::mol2::parse_mol2_file(path),
+    }
+}
+
+/// Parses multiple molecules from a file with automatic format detection.
+///
+/// This function reads the file, detects whether it is SDF V2000, V3000,
+/// or MOL2 format, and uses the appropriate parser.
+pub fn parse_auto_file_multi<P: AsRef<std::path::Path>>(path: P) -> Result<Vec<Molecule>> {
+    let content = std::fs::read_to_string(&path)?;
+    match detect_format(&content) {
+        FileFormat::SdfV2000 => {
+            let cursor = std::io::Cursor::new(content);
+            let reader = std::io::BufReader::new(cursor);
+            let iter = SdfIterator::new(reader);
+            iter.collect()
+        }
+        FileFormat::SdfV3000 => super::sdf_v3000::parse_sdf_v3000_file_multi(path),
+        FileFormat::Mol2 => super::mol2::parse_mol2_file_multi(path),
+    }
+}
+
+/// A boxed iterator over molecules that works with any supported format.
+pub type AutoIterator = Box<dyn Iterator<Item = Result<Molecule>>>;
+
+/// Returns an iterator over molecules in a file with automatic format detection.
+///
+/// This function reads the file, detects whether it is SDF V2000, V3000,
+/// or MOL2 format, and returns an appropriate iterator.
+///
+/// # Example
+///
+/// ```rust,ignore
+/// use sdfrust::iter_auto_file;
+///
+/// // Iterate over any supported format
+/// for result in iter_auto_file("large_database.mol2")? {
+///     let mol = result?;
+///     process(mol);
+/// }
+/// ```
+pub fn iter_auto_file<P: AsRef<std::path::Path>>(path: P) -> Result<AutoIterator> {
+    // Read enough to detect format (first few lines)
+    let content = std::fs::read_to_string(&path)?;
+    let format = detect_format(&content);
+
+    match format {
+        FileFormat::SdfV2000 => {
+            let cursor = std::io::Cursor::new(content);
+            let reader = std::io::BufReader::new(cursor);
+            Ok(Box::new(SdfIterator::new(reader)))
+        }
+        FileFormat::SdfV3000 => {
+            let cursor = std::io::Cursor::new(content);
+            let reader = std::io::BufReader::new(cursor);
+            Ok(Box::new(super::sdf_v3000::SdfV3000Iterator::new(reader)))
+        }
+        FileFormat::Mol2 => {
+            let cursor = std::io::Cursor::new(content);
+            let reader = std::io::BufReader::new(cursor);
+            Ok(Box::new(super::mol2::Mol2Iterator::new(reader)))
+        }
     }
 }
 
