@@ -457,5 +457,10 @@ pub use writer::{
     write_sdf_v3000_string,
 };
 
+// Re-export MOL2 writer functions
+pub use writer::{
+    write_mol2, write_mol2_file, write_mol2_file_multi, write_mol2_multi, write_mol2_string,
+};
+
 // Re-export descriptors module (access via sdfrust::descriptors::*)
 // For direct access: use sdfrust::descriptors::{molecular_weight, exact_mass, ...}

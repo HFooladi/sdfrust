@@ -99,6 +99,11 @@ fn _sdfrust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(writing::py_write_sdf_auto_file, m)?)?;
     m.add_function(wrap_pyfunction!(writing::py_write_sdf_auto_string, m)?)?;
 
+    // MOL2 writing functions
+    m.add_function(wrap_pyfunction!(writing::py_write_mol2_file, m)?)?;
+    m.add_function(wrap_pyfunction!(writing::py_write_mol2_string, m)?)?;
+    m.add_function(wrap_pyfunction!(writing::py_write_mol2_file_multi, m)?)?;
+
     // Iterator functions
     m.add_function(wrap_pyfunction!(iterators::py_iter_sdf_file, m)?)?;
     m.add_function(wrap_pyfunction!(iterators::py_iter_sdf_v3000_file, m)?)?;

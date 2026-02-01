@@ -4,8 +4,9 @@ use pyo3::prelude::*;
 use std::path::Path;
 
 use sdfrust::{
-    write_sdf_auto_file, write_sdf_auto_string, write_sdf_file, write_sdf_file_multi,
-    write_sdf_string, write_sdf_v3000_file, write_sdf_v3000_file_multi, write_sdf_v3000_string,
+    write_mol2_file, write_mol2_file_multi, write_mol2_string, write_sdf_auto_file,
+    write_sdf_auto_string, write_sdf_file, write_sdf_file_multi, write_sdf_string,
+    write_sdf_v3000_file, write_sdf_v3000_file_multi, write_sdf_v3000_string,
 };
 
 use crate::error::convert_error;
@@ -138,4 +139,50 @@ pub fn py_write_sdf_auto_file(molecule: &PyMolecule, path: &str) -> PyResult<()>
 #[pyo3(name = "write_sdf_auto_string")]
 pub fn py_write_sdf_auto_string(molecule: &PyMolecule) -> PyResult<String> {
     write_sdf_auto_string(&molecule.inner).map_err(convert_error)
+}
+
+// ============================================================
+// MOL2 Writing
+// ============================================================
+
+/// Write a molecule to a MOL2 file.
+///
+/// Args:
+///     molecule: The molecule to write.
+///     path: Path to the output file.
+///
+/// Raises:
+///     IOError: If the file cannot be written.
+#[pyfunction]
+#[pyo3(name = "write_mol2_file")]
+pub fn py_write_mol2_file(molecule: &PyMolecule, path: &str) -> PyResult<()> {
+    write_mol2_file(Path::new(path), &molecule.inner).map_err(convert_error)
+}
+
+/// Write a molecule to a MOL2 string.
+///
+/// Args:
+///     molecule: The molecule to write.
+///
+/// Returns:
+///     The MOL2 content as a string.
+#[pyfunction]
+#[pyo3(name = "write_mol2_string")]
+pub fn py_write_mol2_string(molecule: &PyMolecule) -> PyResult<String> {
+    write_mol2_string(&molecule.inner).map_err(convert_error)
+}
+
+/// Write multiple molecules to a MOL2 file.
+///
+/// Args:
+///     molecules: List of molecules to write.
+///     path: Path to the output file.
+///
+/// Raises:
+///     IOError: If the file cannot be written.
+#[pyfunction]
+#[pyo3(name = "write_mol2_file_multi")]
+pub fn py_write_mol2_file_multi(molecules: Vec<PyMolecule>, path: &str) -> PyResult<()> {
+    let mols: Vec<_> = molecules.into_iter().map(|m| m.inner).collect();
+    write_mol2_file_multi(Path::new(path), &mols).map_err(convert_error)
 }

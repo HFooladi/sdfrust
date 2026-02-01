@@ -65,6 +65,10 @@ from sdfrust._sdfrust import (
     # SDF auto-format writing
     write_sdf_auto_file,
     write_sdf_auto_string,
+    # MOL2 writing
+    write_mol2_file,
+    write_mol2_string,
+    write_mol2_file_multi,
     # Iterators
     iter_sdf_file,
     iter_sdf_v3000_file,
@@ -115,6 +119,10 @@ __all__ = [
     # SDF auto-format writing
     "write_sdf_auto_file",
     "write_sdf_auto_string",
+    # MOL2 writing
+    "write_mol2_file",
+    "write_mol2_string",
+    "write_mol2_file_multi",
     # Iterators
     "iter_sdf_file",
     "iter_sdf_v3000_file",

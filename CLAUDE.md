@@ -98,11 +98,10 @@ tests/                         # Rust integration tests
 ├── pubchem_tests.rs           # Real PubChem molecules
 ├── edge_case_tests.rs         # Edge case handling
 ├── mol2_tests.rs              # MOL2 integration tests
-├── sdf_v3000_tests.rs         # SDF V3000 tests
+├── v3000_tests.rs             # SDF V3000 tests
 ├── descriptor_tests.rs        # Molecular descriptor tests
 └── test_data/
     ├── aspirin.sdf            # PubChem CID 2244
-    ├── caffeine.sdf           # Hand-written test file
     ├── caffeine_pubchem.sdf   # PubChem CID 2519
     ├── glucose.sdf            # PubChem CID 5988 (sucrose)
     ├── galactose.sdf          # PubChem CID 5793
@@ -115,7 +114,7 @@ sdfrust-python/tests/          # Python tests
 └── test_basic.py              # 33 pytest tests
 ```
 
-Total: 60 Rust unit tests + integration tests + 33 Python tests
+Total: 200+ Rust tests (unit + integration) + 33 Python tests
 
 ## SDF Format Reference
 
