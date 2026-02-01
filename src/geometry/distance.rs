@@ -4,7 +4,7 @@ use crate::Molecule;
 
 /// Compute the pairwise distance matrix for all atoms in a molecule.
 ///
-/// Returns an NxN matrix where entry [i][j] is the Euclidean distance
+/// Returns an NxN matrix where entry \[i\]\[j\] is the Euclidean distance
 /// between atom i and atom j in Angstroms.
 ///
 /// # Arguments
@@ -93,9 +93,9 @@ mod tests {
         assert_eq!(matrix.len(), 3);
 
         // Check symmetry
-        for i in 0..3 {
-            for j in 0..3 {
-                assert!((matrix[i][j] - matrix[j][i]).abs() < 1e-10);
+        for (i, row) in matrix.iter().enumerate() {
+            for (j, &val) in row.iter().enumerate() {
+                assert!((val - matrix[j][i]).abs() < 1e-10);
             }
         }
     }

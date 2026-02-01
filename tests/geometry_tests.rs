@@ -52,10 +52,10 @@ fn test_distance_matrix_symmetric() {
 
     let matrix = mol.distance_matrix();
 
-    for i in 0..3 {
-        for j in 0..3 {
+    for (i, row) in matrix.iter().enumerate() {
+        for (j, &val) in row.iter().enumerate() {
             assert!(
-                (matrix[i][j] - matrix[j][i]).abs() < 1e-10,
+                (val - matrix[j][i]).abs() < 1e-10,
                 "Matrix should be symmetric"
             );
         }
@@ -73,8 +73,8 @@ fn test_distance_matrix_correct_values() {
     let matrix = mol.distance_matrix();
 
     // Diagonal should be zero
-    for i in 0..4 {
-        assert!((matrix[i][i]).abs() < 1e-10);
+    for (i, row) in matrix.iter().enumerate() {
+        assert!((row[i]).abs() < 1e-10);
     }
 
     // Distance 0-1, 0-2, 0-3 should all be 1.0
@@ -295,11 +295,8 @@ fn test_geometry_with_methane() {
     assert_eq!(matrix.len(), 5);
 
     // All C-H distances should be similar (~1.089)
-    for i in 1..5 {
-        assert!(
-            (matrix[0][i] - 1.089).abs() < 0.01,
-            "C-H distance should be ~1.089"
-        );
+    for &dist in matrix[0].iter().skip(1) {
+        assert!((dist - 1.089).abs() < 0.01, "C-H distance should be ~1.089");
     }
 
     // Test RMSD after rotation
@@ -312,10 +309,10 @@ fn test_geometry_with_methane() {
 
     // But distances should be preserved
     let matrix_after = mol.distance_matrix();
-    for i in 0..5 {
-        for j in 0..5 {
+    for (row_before, row_after) in matrix.iter().zip(matrix_after.iter()) {
+        for (&val_before, &val_after) in row_before.iter().zip(row_after.iter()) {
             assert!(
-                (matrix[i][j] - matrix_after[i][j]).abs() < 1e-10,
+                (val_before - val_after).abs() < 1e-10,
                 "Distances should be preserved after rotation"
             );
         }

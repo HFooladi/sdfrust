@@ -119,7 +119,7 @@ impl Molecule {
 
     /// Compute the pairwise distance matrix for all atoms.
     ///
-    /// Returns an NxN matrix where entry [i][j] is the Euclidean distance
+    /// Returns an NxN matrix where entry \[i\]\[j\] is the Euclidean distance
     /// between atom i and atom j in Angstroms.
     ///
     /// # Returns
