@@ -16,6 +16,11 @@ categories = ["science", "parser-implementations"]
 
 [dependencies]
 thiserror = "2.0"
+nalgebra = { version = "0.32", optional = true }
+
+[features]
+default = []
+geometry = ["nalgebra"]
 
 [dev-dependencies]
 tempfile = "3.14"

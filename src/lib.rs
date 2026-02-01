@@ -411,6 +411,8 @@ pub mod bond;
 pub mod collection;
 pub mod descriptors;
 pub mod error;
+#[cfg(feature = "geometry")]
+pub mod geometry;
 pub mod molecule;
 pub mod parser;
 pub mod sgroup;

@@ -323,6 +323,48 @@ for mol in sdfrust.iter_sdf_file("large.sdf"):
 
 ---
 
+## Phase 9.5: Geometry Module
+
+**Status:** Complete
+
+### Deliverables
+- [x] Feature-gated geometry module (`geometry = ["nalgebra"]`)
+- [x] Distance matrix calculation
+- [x] RMSD calculation (without alignment)
+- [x] 3D rotation operations (rotate by axis/angle)
+- [x] Apply rotation matrix and transformation
+- [x] Python bindings for geometry operations
+- [x] Integration tests for geometry functions
+
+### Module Structure
+```
+src/geometry/
+├── mod.rs           # Module exports and Molecule extension methods
+├── transform.rs     # Coordinate transformations (rotation, apply_transform)
+├── distance.rs      # Distance calculations (distance_matrix)
+└── rmsd.rs          # RMSD calculation
+```
+
+### API
+```rust
+// Rust API (with geometry feature)
+use sdfrust::Molecule;
+
+let mut mol = parse_sdf_file("molecule.sdf")?;
+
+// Distance matrix
+let matrix = mol.distance_matrix();
+
+// Rotation (90° around Z-axis)
+mol.rotate([0.0, 0.0, 1.0], std::f64::consts::PI / 2.0);
+
+// RMSD
+let other = parse_sdf_file("other.sdf")?;
+let rmsd = mol.rmsd_to(&other)?;
+```
+
+---
+
 ## Phase 10: Shared Traits (mol-core)
 
 **Status:** Planned

@@ -566,6 +566,96 @@ impl PyMolecule {
         numpy::PyArray1::from_vec(py, atomic_nums)
     }
 
+    // ============================================================
+    // Geometry operations (when feature is enabled)
+    // ============================================================
+
+    #[cfg(feature = "geometry")]
+    /// Rotate the molecule around an axis by a given angle.
+    ///
+    /// The rotation is performed around the origin. Center the molecule first
+    /// if rotation around the centroid is desired.
+    ///
+    /// Args:
+    ///     axis: The rotation axis as [x, y, z] (will be normalized).
+    ///     angle: The rotation angle in radians.
+    ///
+    /// Example:
+    ///     >>> import math
+    ///     >>> mol.rotate([0, 0, 1], math.pi / 2)  # 90° around Z
+    pub fn rotate(&mut self, axis: [f64; 3], angle: f64) {
+        self.inner.rotate(axis, angle);
+    }
+
+    #[cfg(feature = "geometry")]
+    /// Apply a 3x3 rotation matrix to the molecule.
+    ///
+    /// Args:
+    ///     matrix: A 3x3 rotation matrix as a list of lists.
+    ///
+    /// Example:
+    ///     >>> identity = [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
+    ///     >>> mol.apply_rotation_matrix(identity)
+    pub fn apply_rotation_matrix(&mut self, matrix: [[f64; 3]; 3]) {
+        self.inner.apply_rotation_matrix(&matrix);
+    }
+
+    #[cfg(feature = "geometry")]
+    /// Apply a rotation matrix and translation to the molecule.
+    ///
+    /// First applies the rotation, then the translation.
+    ///
+    /// Args:
+    ///     rotation: A 3x3 rotation matrix as a list of lists.
+    ///     translation: A translation vector [dx, dy, dz].
+    ///
+    /// Example:
+    ///     >>> identity = [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
+    ///     >>> mol.apply_transform(identity, [1, 2, 3])
+    pub fn apply_transform(&mut self, rotation: [[f64; 3]; 3], translation: [f64; 3]) {
+        self.inner.apply_transform(&rotation, translation);
+    }
+
+    #[cfg(feature = "geometry")]
+    /// Compute the pairwise distance matrix for all atoms.
+    ///
+    /// Returns an NxN matrix where entry [i][j] is the Euclidean distance
+    /// between atom i and atom j in Angstroms.
+    ///
+    /// Returns:
+    ///     A list of lists containing pairwise distances.
+    ///
+    /// Example:
+    ///     >>> matrix = mol.distance_matrix()
+    ///     >>> print(matrix[0][1])  # Distance between atoms 0 and 1
+    pub fn distance_matrix(&self) -> Vec<Vec<f64>> {
+        self.inner.distance_matrix()
+    }
+
+    #[cfg(feature = "geometry")]
+    /// Calculate RMSD to another molecule.
+    ///
+    /// Computes the root mean square deviation of atomic positions.
+    /// The molecules must have the same number of atoms.
+    /// No alignment is performed - atoms are compared directly by index.
+    ///
+    /// Args:
+    ///     other: The other molecule to compare to.
+    ///
+    /// Returns:
+    ///     The RMSD value in Angstroms.
+    ///
+    /// Raises:
+    ///     ValueError: If the molecules have different atom counts.
+    ///
+    /// Example:
+    ///     >>> rmsd = mol1.rmsd_to(mol2)
+    pub fn rmsd_to(&self, other: &PyMolecule) -> PyResult<f64> {
+        self.inner
+            .rmsd_to(&other.inner)
+            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))
+    }
+
     fn __repr__(&self) -> String {
         format!(
             "Molecule(name='{}', atoms={}, bonds={})",
