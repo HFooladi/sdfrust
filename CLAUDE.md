@@ -168,15 +168,15 @@ cargo test -- --test-threads=1 # Sequential execution
 
 ## GitHub CI/CD
 
-GitHub Actions workflows are configured in `.github/workflows/rust.yml`. Use `gh_cli` to interact with GitHub:
+GitHub Actions workflows are configured in `.github/workflows/rust.yml`. Use `gh` to interact with GitHub:
 
 ```bash
-gh_cli run list                    # List recent workflow runs
-gh_cli run view <run_id>           # View details of a specific run
-gh_cli run view <run_id> --log     # View full logs
-gh_cli run watch <run_id>          # Watch a run until completion
-gh_cli pr list                     # List pull requests
-gh_cli pr view <pr_number>         # View PR details
+gh run list                    # List recent workflow runs
+gh run view <run_id>           # View details of a specific run
+gh run view <run_id> --log     # View full logs
+gh run watch <run_id>          # Watch a run until completion
+gh pr list                     # List pull requests
+gh pr view <pr_number>         # View PR details
 ```
 
 ## Code Style
