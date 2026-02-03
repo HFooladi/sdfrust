@@ -4,7 +4,7 @@ This document provides context for AI assistants working on this codebase.
 
 ## Project Overview
 
-**sdfrust** is a pure-Rust library for parsing and writing SDF (Structure Data File) and MOL2 chemical structure files. It focuses on fast, safe file I/O for small molecule data.
+**sdfrust** is a pure-Rust library for parsing and writing SDF (Structure Data File), MOL2, and XYZ chemical structure files. It focuses on fast, safe file I/O for small molecule data.
 
 ## Architecture
 
@@ -19,9 +19,10 @@ src/
 ├── molecule.rs         # Molecule container + methods
 ├── parser/
 │   ├── mod.rs          # Parser exports
-│   ├── sdf.rs          # SDF V2000 parser + iterator
+│   ├── sdf.rs          # SDF V2000 parser + iterator + auto-detection
 │   ├── sdf_v3000.rs    # SDF V3000 parser + iterator
-│   └── mol2.rs         # TRIPOS MOL2 parser + iterator
+│   ├── mol2.rs         # TRIPOS MOL2 parser + iterator
+│   └── xyz.rs          # XYZ parser + iterator
 ├── writer/
 │   ├── mod.rs          # Writer exports
 │   ├── sdf.rs          # SDF V2000 writer
@@ -61,6 +62,9 @@ sdfrust-python/         # Python bindings (PyO3)
 - `SdfIterator<R>`: Iterator over molecules in multi-molecule SDF files
 - `Mol2Parser<R>`: Streaming MOL2 parser from any `BufRead`
 - `Mol2Iterator<R>`: Iterator over molecules in multi-molecule MOL2 files
+- `XyzParser<R>`: Streaming XYZ parser from any `BufRead`
+- `XyzIterator<R>`: Iterator over molecules in multi-molecule XYZ files
+- `FileFormat`: Enum for detected format (SdfV2000, SdfV3000, Mol2, Xyz)
 - `StereoGroup`, `SGroup`, `Collection`: V3000-specific structures
 
 ### Design Patterns
@@ -100,6 +104,7 @@ tests/                         # Rust integration tests
 ├── mol2_tests.rs              # MOL2 integration tests
 ├── v3000_tests.rs             # SDF V3000 tests
 ├── descriptor_tests.rs        # Molecular descriptor tests
+├── xyz_tests.rs               # XYZ format integration tests
 └── test_data/
     ├── aspirin.sdf            # PubChem CID 2244
     ├── caffeine_pubchem.sdf   # PubChem CID 2519
@@ -108,13 +113,15 @@ tests/                         # Rust integration tests
     ├── acetaminophen.sdf      # PubChem CID 1983
     ├── methionine.sdf         # PubChem CID 6137
     ├── methane.mol2           # Simple MOL2 test file
-    └── benzene.mol2           # Aromatic MOL2 test file
+    ├── benzene.mol2           # Aromatic MOL2 test file
+    ├── water.xyz              # Simple XYZ test file
+    └── multi.xyz              # Multi-molecule XYZ test file
 
 sdfrust-python/tests/          # Python tests
-└── test_basic.py              # 33 pytest tests
+└── test_basic.py              # 41 pytest tests
 ```
 
-Total: 200+ Rust tests (unit + integration) + 33 Python tests
+Total: 260+ Rust tests (unit + integration) + 41 Python tests
 
 ## SDF Format Reference
 
@@ -217,8 +224,31 @@ bond_id atom1 atom2 type  <- type: 1, 2, 3, ar, am
 3. **Bond Types**: "1" (single), "2" (double), "3" (triple), "ar" (aromatic)
 4. **Atom Indices**: 1-based in file, converted to 0-based internally
 
+## XYZ Format Reference
+
+### Structure
+```
+3                        <- Line 1: atom count (integer)
+water molecule           <- Line 2: comment/title (molecule name)
+O  0.000000  0.000000  0.117300    <- element x y z (whitespace-separated)
+H  0.756950  0.000000 -0.469200
+H -0.756950  0.000000 -0.469200
+```
+
+Multi-molecule files concatenate blocks (no delimiter between molecules).
+
+### Key Parsing Details
+
+1. **Atom Count**: First line must be a positive integer
+2. **Comment Line**: Second line becomes molecule name (can be empty)
+3. **Atom Lines**: Element symbol (or atomic number) followed by x, y, z coordinates
+4. **Element Identifiers**: Accepts symbols ("C", "O") or atomic numbers (6, 8)
+5. **Case Normalization**: Elements normalized to proper case (ca → Ca, CL → Cl)
+6. **Extra Columns**: Any columns after x, y, z are ignored
+7. **No Bonds**: XYZ format contains no bond information (bonds array is empty)
+
 ## Roadmap
 
 See [ROADMAP.md](ROADMAP.md) for detailed development phases.
 
-Current status: Phase 9 (Python Bindings) complete. Next: Phase 10 (Shared Traits).
+Current status: Phase 9.7 (XYZ Parser) complete. Next: Phase 10 (Shared Traits).
