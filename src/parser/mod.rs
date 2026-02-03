@@ -1,6 +1,7 @@
 pub mod mol2;
 pub mod sdf;
 pub mod sdf_v3000;
+pub mod xyz;
 
 pub use sdf::{
     AutoIterator, FileFormat, SdfIterator, SdfParser, detect_format, detect_sdf_format,
@@ -18,4 +19,9 @@ pub use mol2::{
 pub use sdf_v3000::{
     SdfV3000Iterator, SdfV3000Parser, iter_sdf_v3000_file, parse_sdf_v3000_file,
     parse_sdf_v3000_file_multi, parse_sdf_v3000_string, parse_sdf_v3000_string_multi,
+};
+
+pub use xyz::{
+    XyzIterator, XyzParser, iter_xyz_file, parse_xyz_file, parse_xyz_file_multi, parse_xyz_string,
+    parse_xyz_string_multi,
 };

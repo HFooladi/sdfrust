@@ -34,6 +34,7 @@ from sdfrust._sdfrust import (
     SdfIterator,
     SdfV3000Iterator,
     Mol2Iterator,
+    XyzIterator,
     # SDF V2000 parsing
     parse_sdf_file,
     parse_sdf_string,
@@ -49,7 +50,7 @@ from sdfrust._sdfrust import (
     parse_sdf_auto_string,
     parse_sdf_auto_file_multi,
     parse_sdf_auto_string_multi,
-    # Unified auto-detection (SDF V2000, V3000, MOL2)
+    # Unified auto-detection (SDF V2000, V3000, MOL2, XYZ)
     detect_format,
     parse_auto_file,
     parse_auto_string,
@@ -60,6 +61,11 @@ from sdfrust._sdfrust import (
     parse_mol2_string,
     parse_mol2_file_multi,
     parse_mol2_string_multi,
+    # XYZ parsing
+    parse_xyz_file,
+    parse_xyz_string,
+    parse_xyz_file_multi,
+    parse_xyz_string_multi,
     # SDF V2000 writing
     write_sdf_file,
     write_sdf_string,
@@ -79,6 +85,7 @@ from sdfrust._sdfrust import (
     iter_sdf_file,
     iter_sdf_v3000_file,
     iter_mol2_file,
+    iter_xyz_file,
 )
 
 __all__ = [
@@ -94,6 +101,7 @@ __all__ = [
     "SdfIterator",
     "SdfV3000Iterator",
     "Mol2Iterator",
+    "XyzIterator",
     # SDF V2000 parsing
     "parse_sdf_file",
     "parse_sdf_string",
@@ -109,7 +117,7 @@ __all__ = [
     "parse_sdf_auto_string",
     "parse_sdf_auto_file_multi",
     "parse_sdf_auto_string_multi",
-    # Unified auto-detection (SDF V2000, V3000, MOL2)
+    # Unified auto-detection (SDF V2000, V3000, MOL2, XYZ)
     "detect_format",
     "parse_auto_file",
     "parse_auto_string",
@@ -120,6 +128,11 @@ __all__ = [
     "parse_mol2_string",
     "parse_mol2_file_multi",
     "parse_mol2_string_multi",
+    # XYZ parsing
+    "parse_xyz_file",
+    "parse_xyz_string",
+    "parse_xyz_file_multi",
+    "parse_xyz_string_multi",
     # SDF V2000 writing
     "write_sdf_file",
     "write_sdf_string",
@@ -139,4 +152,5 @@ __all__ = [
     "iter_sdf_file",
     "iter_sdf_v3000_file",
     "iter_mol2_file",
+    "iter_xyz_file",
 ]

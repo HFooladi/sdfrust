@@ -16,7 +16,7 @@ pub mod writing;
 
 use atom::PyAtom;
 use bond::{PyBond, PyBondOrder, PyBondStereo};
-use iterators::{PyMol2Iterator, PySdfIterator, PySdfV3000Iterator};
+use iterators::{PyMol2Iterator, PySdfIterator, PySdfV3000Iterator, PyXyzIterator};
 use molecule::{PyMolecule, PySdfFormat};
 
 /// sdfrust - Fast Rust-based SDF and MOL2 molecular structure file parser.
@@ -54,6 +54,7 @@ fn _sdfrust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PySdfIterator>()?;
     m.add_class::<PySdfV3000Iterator>()?;
     m.add_class::<PyMol2Iterator>()?;
+    m.add_class::<PyXyzIterator>()?;
 
     // SDF V2000 parsing functions
     m.add_function(wrap_pyfunction!(parsing::py_parse_sdf_file, m)?)?;
@@ -92,6 +93,12 @@ fn _sdfrust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(parsing::py_parse_mol2_file_multi, m)?)?;
     m.add_function(wrap_pyfunction!(parsing::py_parse_mol2_string_multi, m)?)?;
 
+    // XYZ parsing functions
+    m.add_function(wrap_pyfunction!(parsing::py_parse_xyz_file, m)?)?;
+    m.add_function(wrap_pyfunction!(parsing::py_parse_xyz_string, m)?)?;
+    m.add_function(wrap_pyfunction!(parsing::py_parse_xyz_file_multi, m)?)?;
+    m.add_function(wrap_pyfunction!(parsing::py_parse_xyz_string_multi, m)?)?;
+
     // SDF V2000 writing functions
     m.add_function(wrap_pyfunction!(writing::py_write_sdf_file, m)?)?;
     m.add_function(wrap_pyfunction!(writing::py_write_sdf_string, m)?)?;
@@ -115,6 +122,7 @@ fn _sdfrust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(iterators::py_iter_sdf_file, m)?)?;
     m.add_function(wrap_pyfunction!(iterators::py_iter_sdf_v3000_file, m)?)?;
     m.add_function(wrap_pyfunction!(iterators::py_iter_mol2_file, m)?)?;
+    m.add_function(wrap_pyfunction!(iterators::py_iter_xyz_file, m)?)?;
 
     Ok(())
 }

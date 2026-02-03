@@ -453,6 +453,12 @@ pub use parser::{
     parse_mol2_string, parse_mol2_string_multi,
 };
 
+// Re-export XYZ parser functions
+pub use parser::{
+    XyzIterator, XyzParser, iter_xyz_file, parse_xyz_file, parse_xyz_file_multi, parse_xyz_string,
+    parse_xyz_string_multi,
+};
+
 // Re-export writer functions
 pub use writer::{
     write_sdf, write_sdf_file, write_sdf_file_multi, write_sdf_multi, write_sdf_string,

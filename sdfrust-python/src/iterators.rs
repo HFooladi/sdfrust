@@ -7,7 +7,8 @@ use std::io::BufReader;
 use std::path::Path;
 
 use sdfrust::{
-    iter_mol2_file, iter_sdf_file, iter_sdf_v3000_file, Mol2Iterator, SdfIterator, SdfV3000Iterator,
+    iter_mol2_file, iter_sdf_file, iter_sdf_v3000_file, iter_xyz_file, Mol2Iterator, SdfIterator,
+    SdfV3000Iterator, XyzIterator,
 };
 
 use crate::error::convert_error;
@@ -148,4 +149,52 @@ impl PyMol2Iterator {
 pub fn py_iter_mol2_file(path: &str) -> PyResult<PyMol2Iterator> {
     let iter = iter_mol2_file(Path::new(path)).map_err(convert_error)?;
     Ok(PyMol2Iterator { inner: iter })
+}
+
+/// Iterator over molecules in an XYZ file.
+///
+/// This provides memory-efficient iteration over large XYZ files
+/// without loading all molecules into memory at once.
+#[pyclass(name = "XyzIterator")]
+pub struct PyXyzIterator {
+    inner: XyzIterator<BufReader<File>>,
+}
+
+#[pymethods]
+impl PyXyzIterator {
+    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
+        slf
+    }
+
+    fn __next__(mut slf: PyRefMut<'_, Self>) -> PyResult<Option<PyMolecule>> {
+        match slf.inner.next() {
+            Some(Ok(mol)) => Ok(Some(PyMolecule::from(mol))),
+            Some(Err(e)) => Err(convert_error(e)),
+            None => Err(PyStopIteration::new_err(())),
+        }
+    }
+}
+
+/// Create an iterator over molecules in an XYZ file.
+///
+/// This is memory-efficient for large files as molecules are parsed
+/// one at a time rather than loading the entire file.
+///
+/// Args:
+///     path: Path to the XYZ file.
+///
+/// Returns:
+///     An iterator that yields Molecule objects.
+///
+/// Raises:
+///     IOError: If the file cannot be opened.
+///
+/// Example:
+///     >>> for mol in iter_xyz_file("trajectory.xyz"):
+///     ...     print(f"{mol.name}: {mol.num_atoms} atoms")
+#[pyfunction]
+#[pyo3(name = "iter_xyz_file")]
+pub fn py_iter_xyz_file(path: &str) -> PyResult<PyXyzIterator> {
+    let iter = iter_xyz_file(Path::new(path)).map_err(convert_error)?;
+    Ok(PyXyzIterator { inner: iter })
 }

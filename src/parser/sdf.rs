@@ -18,6 +18,8 @@ pub enum FileFormat {
     SdfV3000,
     /// TRIPOS MOL2 format
     Mol2,
+    /// XYZ format (coordinates only, no bonds)
+    Xyz,
 }
 
 impl std::fmt::Display for FileFormat {
@@ -26,6 +28,7 @@ impl std::fmt::Display for FileFormat {
             FileFormat::SdfV2000 => write!(f, "sdf_v2000"),
             FileFormat::SdfV3000 => write!(f, "sdf_v3000"),
             FileFormat::Mol2 => write!(f, "mol2"),
+            FileFormat::Xyz => write!(f, "xyz"),
         }
     }
 }
@@ -609,10 +612,11 @@ pub fn parse_sdf_auto_file_multi<P: AsRef<std::path::Path>>(path: P) -> Result<V
 ///
 /// This function examines the content to determine whether it is:
 /// - MOL2 format (contains `@<TRIPOS>` marker)
+/// - XYZ format (first line is integer, third line has element + 3 floats)
 /// - SDF V3000 format (contains `V3000` on the counts line)
 /// - SDF V2000 format (default)
 ///
-/// Detection order: MOL2 → V3000 → V2000 (default)
+/// Detection order: MOL2 → XYZ → V3000 → V2000 (default)
 ///
 /// # Example
 ///
@@ -622,6 +626,9 @@ pub fn parse_sdf_auto_file_multi<P: AsRef<std::path::Path>>(path: P) -> Result<V
 ///
 /// let mol2_content = "@<TRIPOS>MOLECULE\ntest\n";
 /// assert_eq!(detect_format(mol2_content), FileFormat::Mol2);
+///
+/// let xyz_content = "3\nwater\nO 0.0 0.0 0.0\nH 1.0 0.0 0.0\nH -1.0 0.0 0.0\n";
+/// assert_eq!(detect_format(xyz_content), FileFormat::Xyz);
 ///
 /// let v2000_content = "test\n\n\n  5  4  0  0  0  0  0  0  0  0999 V2000\n";
 /// assert_eq!(detect_format(v2000_content), FileFormat::SdfV2000);
@@ -634,8 +641,32 @@ pub fn detect_format(content: &str) -> FileFormat {
         }
     }
 
-    // Check line 4 for V3000 marker
+    // Check for XYZ format:
+    // - First line should be an integer (atom count)
+    // - Third line should be: element x y z (element + 3 floats)
     let lines: Vec<&str> = content.lines().take(5).collect();
+    if lines.len() >= 3 {
+        let first_line_is_int = lines[0].trim().parse::<usize>().is_ok();
+        if first_line_is_int {
+            // Check if line 3 looks like an XYZ atom line
+            let parts: Vec<&str> = lines[2].split_whitespace().collect();
+            if parts.len() >= 4 {
+                // First part should be element (letters or small number)
+                // Next three should be parseable as floats
+                let looks_like_element =
+                    parts[0].chars().all(|c| c.is_alphabetic()) || parts[0].parse::<u8>().is_ok();
+                let has_three_coords = parts[1].parse::<f64>().is_ok()
+                    && parts[2].parse::<f64>().is_ok()
+                    && parts[3].parse::<f64>().is_ok();
+
+                if looks_like_element && has_three_coords {
+                    return FileFormat::Xyz;
+                }
+            }
+        }
+    }
+
+    // Check line 4 for V3000 marker
     if lines.len() >= 4 && lines[3].contains("V3000") {
         return FileFormat::SdfV3000;
     }
@@ -647,7 +678,7 @@ pub fn detect_format(content: &str) -> FileFormat {
 /// Parses a single molecule from a string with automatic format detection.
 ///
 /// This function automatically detects whether the content is SDF V2000, V3000,
-/// or MOL2 format and uses the appropriate parser.
+/// MOL2, or XYZ format and uses the appropriate parser.
 ///
 /// # Example
 ///
@@ -662,25 +693,27 @@ pub fn parse_auto_string(content: &str) -> Result<Molecule> {
         FileFormat::SdfV2000 => parse_sdf_string(content),
         FileFormat::SdfV3000 => super::sdf_v3000::parse_sdf_v3000_string(content),
         FileFormat::Mol2 => super::mol2::parse_mol2_string(content),
+        FileFormat::Xyz => super::xyz::parse_xyz_string(content),
     }
 }
 
 /// Parses multiple molecules from a string with automatic format detection.
 ///
 /// This function automatically detects whether the content is SDF V2000, V3000,
-/// or MOL2 format and uses the appropriate parser.
+/// MOL2, or XYZ format and uses the appropriate parser.
 pub fn parse_auto_string_multi(content: &str) -> Result<Vec<Molecule>> {
     match detect_format(content) {
         FileFormat::SdfV2000 => parse_sdf_string_multi(content),
         FileFormat::SdfV3000 => super::sdf_v3000::parse_sdf_v3000_string_multi(content),
         FileFormat::Mol2 => super::mol2::parse_mol2_string_multi(content),
+        FileFormat::Xyz => super::xyz::parse_xyz_string_multi(content),
     }
 }
 
 /// Parses a single molecule from a file with automatic format detection.
 ///
 /// This function reads the file, detects whether it is SDF V2000, V3000,
-/// or MOL2 format, and uses the appropriate parser.
+/// MOL2, or XYZ format, and uses the appropriate parser.
 ///
 /// # Example
 ///
@@ -690,6 +723,7 @@ pub fn parse_auto_string_multi(content: &str) -> Result<Vec<Molecule>> {
 /// // Works with any supported format
 /// let mol = parse_auto_file("molecule.sdf")?;  // SDF V2000 or V3000
 /// let mol = parse_auto_file("molecule.mol2")?; // MOL2
+/// let mol = parse_auto_file("molecule.xyz")?;  // XYZ
 /// ```
 pub fn parse_auto_file<P: AsRef<std::path::Path>>(path: P) -> Result<Molecule> {
     let content = std::fs::read_to_string(&path)?;
@@ -702,13 +736,14 @@ pub fn parse_auto_file<P: AsRef<std::path::Path>>(path: P) -> Result<Molecule> {
         }
         FileFormat::SdfV3000 => super::sdf_v3000::parse_sdf_v3000_file(path),
         FileFormat::Mol2 => super::mol2::parse_mol2_file(path),
+        FileFormat::Xyz => super::xyz::parse_xyz_file(path),
     }
 }
 
 /// Parses multiple molecules from a file with automatic format detection.
 ///
 /// This function reads the file, detects whether it is SDF V2000, V3000,
-/// or MOL2 format, and uses the appropriate parser.
+/// MOL2, or XYZ format, and uses the appropriate parser.
 pub fn parse_auto_file_multi<P: AsRef<std::path::Path>>(path: P) -> Result<Vec<Molecule>> {
     let content = std::fs::read_to_string(&path)?;
     match detect_format(&content) {
@@ -720,6 +755,7 @@ pub fn parse_auto_file_multi<P: AsRef<std::path::Path>>(path: P) -> Result<Vec<M
         }
         FileFormat::SdfV3000 => super::sdf_v3000::parse_sdf_v3000_file_multi(path),
         FileFormat::Mol2 => super::mol2::parse_mol2_file_multi(path),
+        FileFormat::Xyz => super::xyz::parse_xyz_file_multi(path),
     }
 }
 
@@ -729,7 +765,7 @@ pub type AutoIterator = Box<dyn Iterator<Item = Result<Molecule>>>;
 /// Returns an iterator over molecules in a file with automatic format detection.
 ///
 /// This function reads the file, detects whether it is SDF V2000, V3000,
-/// or MOL2 format, and returns an appropriate iterator.
+/// MOL2, or XYZ format, and returns an appropriate iterator.
 ///
 /// # Example
 ///
@@ -762,6 +798,11 @@ pub fn iter_auto_file<P: AsRef<std::path::Path>>(path: P) -> Result<AutoIterator
             let cursor = std::io::Cursor::new(content);
             let reader = std::io::BufReader::new(cursor);
             Ok(Box::new(super::mol2::Mol2Iterator::new(reader)))
+        }
+        FileFormat::Xyz => {
+            let cursor = std::io::Cursor::new(content);
+            let reader = std::io::BufReader::new(cursor);
+            Ok(Box::new(super::xyz::XyzIterator::new(reader)))
         }
     }
 }

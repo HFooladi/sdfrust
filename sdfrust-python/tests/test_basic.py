@@ -266,6 +266,93 @@ class TestSdfWriting:
             os.unlink(temp_path)
 
 
+class TestXyzParsing:
+    """Test XYZ parsing functionality."""
+
+    def test_parse_xyz_string(self):
+        """Test parsing XYZ from string."""
+        xyz_content = """3
+water molecule
+O  0.000000  0.000000  0.117300
+H  0.756950  0.000000 -0.469200
+H -0.756950  0.000000 -0.469200
+"""
+        mol = sdfrust.parse_xyz_string(xyz_content)
+        assert mol.name == "water molecule"
+        assert mol.num_atoms == 3
+        assert mol.num_bonds == 0  # XYZ has no bonds
+        assert mol.formula() == "H2O"
+
+    def test_parse_xyz_file(self):
+        """Test parsing XYZ from file."""
+        water_path = os.path.join(TEST_DATA_DIR, "water.xyz")
+        if os.path.exists(water_path):
+            mol = sdfrust.parse_xyz_file(water_path)
+            assert mol.name == "water molecule"
+            assert mol.num_atoms == 3
+            assert mol.formula() == "H2O"
+
+    def test_parse_xyz_file_multi(self):
+        """Test parsing multiple molecules from XYZ file."""
+        multi_path = os.path.join(TEST_DATA_DIR, "multi.xyz")
+        if os.path.exists(multi_path):
+            mols = sdfrust.parse_xyz_file_multi(multi_path)
+            assert len(mols) == 3
+            assert mols[0].name == "water molecule"
+            assert mols[1].name == "methane"
+            assert mols[2].name == "diatomic hydrogen"
+
+    def test_parse_xyz_string_multi(self):
+        """Test parsing multiple molecules from XYZ string."""
+        xyz_content = """2
+mol1
+C  0.0  0.0  0.0
+O  1.2  0.0  0.0
+3
+mol2
+N  0.0  0.0  0.0
+H  1.0  0.0  0.0
+H -1.0  0.0  0.0
+"""
+        mols = sdfrust.parse_xyz_string_multi(xyz_content)
+        assert len(mols) == 2
+        assert mols[0].name == "mol1"
+        assert mols[1].name == "mol2"
+
+    def test_iter_xyz_file(self):
+        """Test iterating over XYZ file."""
+        multi_path = os.path.join(TEST_DATA_DIR, "multi.xyz")
+        if os.path.exists(multi_path):
+            count = 0
+            for mol in sdfrust.iter_xyz_file(multi_path):
+                count += 1
+                assert mol.num_atoms > 0
+            assert count == 3
+
+    def test_invalid_xyz(self):
+        """Test that invalid XYZ raises an error."""
+        with pytest.raises(ValueError):
+            sdfrust.parse_xyz_string("invalid content")
+
+    def test_detect_format_xyz(self):
+        """Test format detection for XYZ content."""
+        xyz_content = "3\nwater\nO 0.0 0.0 0.0\nH 1.0 0.0 0.0\nH -1.0 0.0 0.0\n"
+        fmt = sdfrust.detect_format(xyz_content)
+        assert fmt == "xyz"
+
+    def test_parse_auto_xyz(self):
+        """Test auto-detection parsing of XYZ content."""
+        xyz_content = """3
+water
+O  0.0  0.0  0.0
+H  1.0  0.0  0.0
+H -1.0  0.0  0.0
+"""
+        mol = sdfrust.parse_auto_string(xyz_content)
+        assert mol.name == "water"
+        assert mol.num_atoms == 3
+
+
 class TestIterators:
     """Test iterator functionality."""
 

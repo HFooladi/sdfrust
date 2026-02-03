@@ -9,7 +9,8 @@ use sdfrust::{
     parse_mol2_string_multi, parse_sdf_auto_file, parse_sdf_auto_file_multi, parse_sdf_auto_string,
     parse_sdf_auto_string_multi, parse_sdf_file, parse_sdf_file_multi, parse_sdf_string,
     parse_sdf_string_multi, parse_sdf_v3000_file, parse_sdf_v3000_file_multi,
-    parse_sdf_v3000_string, parse_sdf_v3000_string_multi,
+    parse_sdf_v3000_string, parse_sdf_v3000_string_multi, parse_xyz_file, parse_xyz_file_multi,
+    parse_xyz_string, parse_xyz_string_multi,
 };
 
 use crate::error::convert_error;
@@ -450,6 +451,93 @@ pub fn py_parse_auto_file_multi(path: &str) -> PyResult<Vec<PyMolecule>> {
 #[pyo3(name = "parse_auto_string_multi")]
 pub fn py_parse_auto_string_multi(content: &str) -> PyResult<Vec<PyMolecule>> {
     parse_auto_string_multi(content)
+        .map(|mols| mols.into_iter().map(PyMolecule::from).collect())
+        .map_err(convert_error)
+}
+
+// ============================================================
+// XYZ Parsing
+// ============================================================
+
+/// Parse a single molecule from an XYZ file.
+///
+/// XYZ is a simple format containing only atomic coordinates (no bonds).
+///
+/// Args:
+///     path: Path to the XYZ file.
+///
+/// Returns:
+///     The parsed Molecule.
+///
+/// Raises:
+///     IOError: If the file cannot be read.
+///     ValueError: If the file cannot be parsed.
+///
+/// Example:
+///     >>> import sdfrust
+///     >>> mol = sdfrust.parse_xyz_file("water.xyz")
+///     >>> print(f"{mol.name}: {mol.num_atoms} atoms")
+#[pyfunction]
+#[pyo3(name = "parse_xyz_file")]
+pub fn py_parse_xyz_file(path: &str) -> PyResult<PyMolecule> {
+    parse_xyz_file(Path::new(path))
+        .map(PyMolecule::from)
+        .map_err(convert_error)
+}
+
+/// Parse a single molecule from an XYZ string.
+///
+/// Args:
+///     content: The XYZ content as a string.
+///
+/// Returns:
+///     The parsed Molecule.
+///
+/// Raises:
+///     ValueError: If the content cannot be parsed.
+#[pyfunction]
+#[pyo3(name = "parse_xyz_string")]
+pub fn py_parse_xyz_string(content: &str) -> PyResult<PyMolecule> {
+    parse_xyz_string(content)
+        .map(PyMolecule::from)
+        .map_err(convert_error)
+}
+
+/// Parse multiple molecules from an XYZ file.
+///
+/// XYZ files can contain multiple molecules concatenated together.
+///
+/// Args:
+///     path: Path to the XYZ file.
+///
+/// Returns:
+///     A list of parsed Molecules.
+///
+/// Raises:
+///     IOError: If the file cannot be read.
+///     ValueError: If the file cannot be parsed.
+#[pyfunction]
+#[pyo3(name = "parse_xyz_file_multi")]
+pub fn py_parse_xyz_file_multi(path: &str) -> PyResult<Vec<PyMolecule>> {
+    parse_xyz_file_multi(Path::new(path))
+        .map(|mols| mols.into_iter().map(PyMolecule::from).collect())
+        .map_err(convert_error)
+}
+
+/// Parse multiple molecules from an XYZ string.
+///
+/// Args:
+///     content: The XYZ content as a string.
+///
+/// Returns:
+///     A list of parsed Molecules.
+///
+/// Raises:
+///     ValueError: If the content cannot be parsed.
+#[pyfunction]
+#[pyo3(name = "parse_xyz_string_multi")]
+pub fn py_parse_xyz_string_multi(content: &str) -> PyResult<Vec<PyMolecule>> {
+    parse_xyz_string_multi(content)
         .map(|mols| mols.into_iter().map(PyMolecule::from).collect())
         .map_err(convert_error)
 }
