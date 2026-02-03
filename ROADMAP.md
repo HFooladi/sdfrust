@@ -202,15 +202,17 @@ open target/criterion/report/index.html
 
 ## Phase 7: Format Auto-Detection ✅ COMPLETE
 
-**Status:** Implemented (integrated with Phase 6)
+**Status:** Implemented (integrated with Phase 6, extended in Phase 9.7)
 
 ### Deliverables
-- [x] Detect format from file content (V2000 vs V3000)
-- [x] `detect_sdf_format()` function
+- [x] Detect format from file content (V2000 vs V3000 vs MOL2 vs XYZ)
+- [x] `detect_sdf_format()` function (SDF V2000/V3000 only)
+- [x] `detect_format()` function (all formats: SDF V2000, V3000, MOL2, XYZ)
 - [x] `parse_sdf_auto_string()` / `parse_sdf_auto_file()` functions
+- [x] `parse_auto_string()` / `parse_auto_file()` functions (all formats)
 - [x] `write_sdf_auto()` - auto-selects V2000/V3000 based on molecule needs
 - [x] `needs_v3000()` - checks if molecule requires V3000 format
-- [ ] Detect format from file extension (.sdf, .mol, .mol2) - deferred
+- [ ] Detect format from file extension (.sdf, .mol, .mol2, .xyz) - deferred
 - [ ] Gzip support (transparent decompression) - deferred
 
 ---
@@ -258,10 +260,10 @@ Descriptor functions are available via:
 - [x] `PyMolecule` wrapper class with all properties and methods
 - [x] `PyAtom`, `PyBond`, `PyBondOrder`, `PyBondStereo` wrappers
 - [x] `PySdfFormat` for V2000/V3000 handling
-- [x] File I/O bindings for SDF and MOL2
+- [x] File I/O bindings for SDF, MOL2, and XYZ
 - [x] NumPy array support for coordinates (`get_coords_array`, `set_coords_array`)
 - [x] Atomic number array support (`get_atomic_numbers`)
-- [x] Iterator support for large files (`iter_sdf_file`, `iter_mol2_file`)
+- [x] Iterator support for large files (`iter_sdf_file`, `iter_mol2_file`, `iter_xyz_file`)
 - [x] All molecular descriptors exposed (MW, ring count, etc.)
 - [x] Maturin build configuration with workspace integration
 - [ ] PyPI package publication (pending)
@@ -284,19 +286,20 @@ sdfrust-python/
 │   ├── __init__.py      # Re-exports
 │   └── py.typed         # PEP 561 marker
 └── tests/
-    └── test_basic.py    # 33 pytest tests
+    └── test_basic.py    # 41 pytest tests
 ```
 
 ### Test Coverage
-- 33 pytest tests covering:
+- 41 pytest tests covering:
   - Version and module import
   - Atom creation and methods
   - Bond creation and methods
   - Molecule creation, atoms, bonds, properties
   - SDF string and file parsing
   - MOL2 string and file parsing
+  - XYZ string and file parsing
   - SDF writing
-  - Iterators
+  - Iterators (SDF, MOL2, XYZ)
   - Molecular descriptors
   - Geometry operations
   - NumPy coordinate arrays
@@ -305,9 +308,11 @@ sdfrust-python/
 ```python
 import sdfrust
 
-# Parse molecules
+# Parse molecules (multiple formats)
 mol = sdfrust.parse_sdf_file("molecule.sdf")
 mol = sdfrust.parse_mol2_file("molecule.mol2")
+mol = sdfrust.parse_xyz_file("molecule.xyz")
+mol = sdfrust.parse_auto_file("any_format.xyz")  # Auto-detect
 
 # Access properties
 print(mol.name, mol.num_atoms, mol.formula())
@@ -362,6 +367,81 @@ mol.rotate([0.0, 0.0, 1.0], std::f64::consts::PI / 2.0);
 let other = parse_sdf_file("other.sdf")?;
 let rmsd = mol.rmsd_to(&other)?;
 ```
+
+---
+
+## Phase 9.7: XYZ Format Parser ✅ COMPLETE
+
+**Status:** Implemented and tested
+
+### Deliverables
+- [x] Parse XYZ molecular coordinate format
+  - [x] Atom count line (first line)
+  - [x] Comment/title line (second line, used as molecule name)
+  - [x] Atom lines (element x y z, whitespace-separated)
+- [x] Multi-molecule XYZ files (concatenated blocks)
+- [x] Memory-efficient iterator for large files
+- [x] Automatic format detection (added to `detect_format()`)
+- [x] Full Python bindings
+
+### Special Features
+- [x] Atomic numbers as element identifiers (1 → H, 6 → C, 8 → O, etc.)
+- [x] Element symbol case normalization (ca → Ca, CL → Cl)
+- [x] Extra columns after x/y/z are ignored
+- [x] Blank lines between molecules handled gracefully
+- [x] Scientific notation coordinates supported
+
+### API
+```rust
+use sdfrust::{parse_xyz_file, parse_xyz_string, iter_xyz_file};
+
+// Parse single molecule
+let mol = parse_xyz_file("water.xyz")?;
+let mol = parse_xyz_string(xyz_content)?;
+
+// Parse multiple molecules
+let mols = parse_xyz_file_multi("trajectory.xyz")?;
+
+// Stream large files
+for result in iter_xyz_file("large.xyz")? {
+    let mol = result?;
+    process(mol);
+}
+
+// Auto-detection works with XYZ
+let mol = parse_auto_file("molecule.xyz")?;  // Detects XYZ format
+```
+
+### Python API
+```python
+import sdfrust
+
+# Parse XYZ files
+mol = sdfrust.parse_xyz_file("water.xyz")
+mol = sdfrust.parse_xyz_string(xyz_content)
+
+# Multi-molecule
+mols = sdfrust.parse_xyz_file_multi("trajectory.xyz")
+
+# Iterate over large files
+for mol in sdfrust.iter_xyz_file("large.xyz"):
+    process(mol)
+
+# Auto-detection
+mol = sdfrust.parse_auto_file("molecule.xyz")
+fmt = sdfrust.detect_format(content)  # Returns "xyz"
+```
+
+### Test Coverage
+- 12 unit tests in parser module
+- 32 integration tests in `tests/xyz_tests.rs`
+- 8 Python tests in `test_basic.py`
+- Edge cases: atomic numbers, case normalization, scientific notation, blank lines
+
+### Notes
+- XYZ format contains no bond information; `mol.bonds` will be empty
+- Molecule name is taken from the comment line (line 2)
+- Format detection checks: first line is integer, third line has element + 3 floats
 
 ---
 

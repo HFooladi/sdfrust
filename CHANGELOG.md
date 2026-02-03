@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **XYZ Format Parser** (`src/parser/xyz.rs`)
+  - Parse XYZ molecular coordinate files (coordinates only, no bonds)
+  - `XyzParser<R>` and `XyzIterator<R>` for streaming parsing
+  - Support for atomic numbers as element identifiers (1 → H, 6 → C, 8 → O)
+  - Element symbol case normalization (ca → Ca)
+  - Multi-molecule XYZ files (concatenated blocks)
+  - `parse_xyz_string()`, `parse_xyz_file()`, `iter_xyz_file()` functions
+
+- **Unified Auto-Detection for XYZ**
+  - `FileFormat::Xyz` variant added to format detection
+  - `detect_format()` now recognizes XYZ format
+  - `parse_auto_string()`, `parse_auto_file()`, `iter_auto_file()` support XYZ
+
+- **Python Bindings for XYZ**
+  - `parse_xyz_file()`, `parse_xyz_string()` functions
+  - `parse_xyz_file_multi()`, `parse_xyz_string_multi()` functions
+  - `iter_xyz_file()` streaming iterator
+  - `XyzIterator` class for memory-efficient iteration
+
+- **Test Coverage**
+  - 32 XYZ integration tests
+  - 12 XYZ unit tests
+  - 8 Python XYZ tests
+  - Test data files: `water.xyz`, `multi.xyz`
+
 ## [0.4.0] - 2026-01-30
 
 ### Added
