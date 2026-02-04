@@ -517,27 +517,85 @@ pub fn parse_sdf_string_multi(content: &str) -> Result<Vec<Molecule>> {
 }
 
 /// Parses a single molecule from an SDF file.
+///
+/// When the `gzip` feature is enabled, files ending in `.gz` are automatically
+/// decompressed.
 pub fn parse_sdf_file<P: AsRef<std::path::Path>>(path: P) -> Result<Molecule> {
-    let file = std::fs::File::open(path)?;
-    let reader = std::io::BufReader::new(file);
-    let mut parser = SdfParser::new(reader);
+    #[cfg(feature = "gzip")]
+    {
+        let reader = super::compression::open_maybe_gz(&path)?;
+        let mut parser = SdfParser::new(reader);
+        parser.parse_molecule()?.ok_or(SdfError::EmptyFile)
+    }
 
-    parser.parse_molecule()?.ok_or(SdfError::EmptyFile)
+    #[cfg(not(feature = "gzip"))]
+    {
+        if path
+            .as_ref()
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("gz"))
+        {
+            return Err(SdfError::GzipNotEnabled);
+        }
+        let file = std::fs::File::open(path)?;
+        let reader = std::io::BufReader::new(file);
+        let mut parser = SdfParser::new(reader);
+        parser.parse_molecule()?.ok_or(SdfError::EmptyFile)
+    }
 }
 
 /// Parses all molecules from an SDF file.
+///
+/// When the `gzip` feature is enabled, files ending in `.gz` are automatically
+/// decompressed.
 pub fn parse_sdf_file_multi<P: AsRef<std::path::Path>>(path: P) -> Result<Vec<Molecule>> {
-    let file = std::fs::File::open(path)?;
-    let reader = std::io::BufReader::new(file);
-    let iter = SdfIterator::new(reader);
+    #[cfg(feature = "gzip")]
+    {
+        let reader = super::compression::open_maybe_gz(&path)?;
+        let iter = SdfIterator::new(reader);
+        iter.collect()
+    }
 
-    iter.collect()
+    #[cfg(not(feature = "gzip"))]
+    {
+        if path
+            .as_ref()
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("gz"))
+        {
+            return Err(SdfError::GzipNotEnabled);
+        }
+        let file = std::fs::File::open(path)?;
+        let reader = std::io::BufReader::new(file);
+        let iter = SdfIterator::new(reader);
+        iter.collect()
+    }
 }
 
 /// Returns an iterator over molecules in an SDF file.
+///
+/// When the `gzip` feature is enabled, files ending in `.gz` are automatically
+/// decompressed. Note that the return type differs based on the feature flag.
+#[cfg(feature = "gzip")]
+pub fn iter_sdf_file<P: AsRef<std::path::Path>>(
+    path: P,
+) -> Result<SdfIterator<super::compression::MaybeGzReader>> {
+    let reader = super::compression::open_maybe_gz(&path)?;
+    Ok(SdfIterator::new(reader))
+}
+
+/// Returns an iterator over molecules in an SDF file.
+#[cfg(not(feature = "gzip"))]
 pub fn iter_sdf_file<P: AsRef<std::path::Path>>(
     path: P,
 ) -> Result<SdfIterator<std::io::BufReader<std::fs::File>>> {
+    if path
+        .as_ref()
+        .extension()
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("gz"))
+    {
+        return Err(SdfError::GzipNotEnabled);
+    }
     let file = std::fs::File::open(path)?;
     let reader = std::io::BufReader::new(file);
     Ok(SdfIterator::new(reader))
@@ -576,9 +634,25 @@ pub fn parse_sdf_auto_string_multi(content: &str) -> Result<Vec<Molecule>> {
 }
 
 /// Parses an SDF file with automatic format detection.
+///
+/// When the `gzip` feature is enabled, files ending in `.gz` are automatically
+/// decompressed.
 pub fn parse_sdf_auto_file<P: AsRef<std::path::Path>>(path: P) -> Result<Molecule> {
-    // Read the first few lines to detect format
-    let content = std::fs::read_to_string(&path)?;
+    #[cfg(feature = "gzip")]
+    let content = super::compression::read_maybe_gz_to_string(&path)?;
+
+    #[cfg(not(feature = "gzip"))]
+    let content = {
+        if path
+            .as_ref()
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("gz"))
+        {
+            return Err(SdfError::GzipNotEnabled);
+        }
+        std::fs::read_to_string(&path)?
+    };
+
     match detect_sdf_format(&content) {
         SdfFormat::V2000 => {
             let cursor = std::io::Cursor::new(content);
@@ -586,13 +660,36 @@ pub fn parse_sdf_auto_file<P: AsRef<std::path::Path>>(path: P) -> Result<Molecul
             let mut parser = SdfParser::new(reader);
             parser.parse_molecule()?.ok_or(SdfError::EmptyFile)
         }
-        SdfFormat::V3000 => super::sdf_v3000::parse_sdf_v3000_file(path),
+        SdfFormat::V3000 => {
+            // For V3000, parse from the content we already read
+            let cursor = std::io::Cursor::new(content);
+            let reader = std::io::BufReader::new(cursor);
+            let mut iter = super::sdf_v3000::SdfV3000Iterator::new(reader);
+            iter.next().ok_or(SdfError::EmptyFile)?
+        }
     }
 }
 
 /// Parses all molecules from an SDF file with automatic format detection.
+///
+/// When the `gzip` feature is enabled, files ending in `.gz` are automatically
+/// decompressed.
 pub fn parse_sdf_auto_file_multi<P: AsRef<std::path::Path>>(path: P) -> Result<Vec<Molecule>> {
-    let content = std::fs::read_to_string(&path)?;
+    #[cfg(feature = "gzip")]
+    let content = super::compression::read_maybe_gz_to_string(&path)?;
+
+    #[cfg(not(feature = "gzip"))]
+    let content = {
+        if path
+            .as_ref()
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("gz"))
+        {
+            return Err(SdfError::GzipNotEnabled);
+        }
+        std::fs::read_to_string(&path)?
+    };
+
     match detect_sdf_format(&content) {
         SdfFormat::V2000 => {
             let cursor = std::io::Cursor::new(content);
@@ -600,7 +697,12 @@ pub fn parse_sdf_auto_file_multi<P: AsRef<std::path::Path>>(path: P) -> Result<V
             let iter = SdfIterator::new(reader);
             iter.collect()
         }
-        SdfFormat::V3000 => super::sdf_v3000::parse_sdf_v3000_file_multi(path),
+        SdfFormat::V3000 => {
+            let cursor = std::io::Cursor::new(content);
+            let reader = std::io::BufReader::new(cursor);
+            let iter = super::sdf_v3000::SdfV3000Iterator::new(reader);
+            iter.collect()
+        }
     }
 }
 
@@ -715,6 +817,9 @@ pub fn parse_auto_string_multi(content: &str) -> Result<Vec<Molecule>> {
 /// This function reads the file, detects whether it is SDF V2000, V3000,
 /// MOL2, or XYZ format, and uses the appropriate parser.
 ///
+/// When the `gzip` feature is enabled, files ending in `.gz` are automatically
+/// decompressed.
+///
 /// # Example
 ///
 /// ```rust,ignore
@@ -724,9 +829,24 @@ pub fn parse_auto_string_multi(content: &str) -> Result<Vec<Molecule>> {
 /// let mol = parse_auto_file("molecule.sdf")?;  // SDF V2000 or V3000
 /// let mol = parse_auto_file("molecule.mol2")?; // MOL2
 /// let mol = parse_auto_file("molecule.xyz")?;  // XYZ
+/// let mol = parse_auto_file("molecule.sdf.gz")?;  // Gzipped (requires gzip feature)
 /// ```
 pub fn parse_auto_file<P: AsRef<std::path::Path>>(path: P) -> Result<Molecule> {
-    let content = std::fs::read_to_string(&path)?;
+    #[cfg(feature = "gzip")]
+    let content = super::compression::read_maybe_gz_to_string(&path)?;
+
+    #[cfg(not(feature = "gzip"))]
+    let content = {
+        if path
+            .as_ref()
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("gz"))
+        {
+            return Err(SdfError::GzipNotEnabled);
+        }
+        std::fs::read_to_string(&path)?
+    };
+
     match detect_format(&content) {
         FileFormat::SdfV2000 => {
             let cursor = std::io::Cursor::new(content);
@@ -734,9 +854,24 @@ pub fn parse_auto_file<P: AsRef<std::path::Path>>(path: P) -> Result<Molecule> {
             let mut parser = SdfParser::new(reader);
             parser.parse_molecule()?.ok_or(SdfError::EmptyFile)
         }
-        FileFormat::SdfV3000 => super::sdf_v3000::parse_sdf_v3000_file(path),
-        FileFormat::Mol2 => super::mol2::parse_mol2_file(path),
-        FileFormat::Xyz => super::xyz::parse_xyz_file(path),
+        FileFormat::SdfV3000 => {
+            let cursor = std::io::Cursor::new(content);
+            let reader = std::io::BufReader::new(cursor);
+            let mut iter = super::sdf_v3000::SdfV3000Iterator::new(reader);
+            iter.next().ok_or(SdfError::EmptyFile)?
+        }
+        FileFormat::Mol2 => {
+            let cursor = std::io::Cursor::new(content);
+            let reader = std::io::BufReader::new(cursor);
+            let mut parser = super::mol2::Mol2Parser::new(reader);
+            parser.parse_molecule()?.ok_or(SdfError::EmptyFile)
+        }
+        FileFormat::Xyz => {
+            let cursor = std::io::Cursor::new(content);
+            let reader = std::io::BufReader::new(cursor);
+            let mut parser = super::xyz::XyzParser::new(reader);
+            parser.parse_molecule()?.ok_or(SdfError::EmptyFile)
+        }
     }
 }
 
@@ -744,8 +879,25 @@ pub fn parse_auto_file<P: AsRef<std::path::Path>>(path: P) -> Result<Molecule> {
 ///
 /// This function reads the file, detects whether it is SDF V2000, V3000,
 /// MOL2, or XYZ format, and uses the appropriate parser.
+///
+/// When the `gzip` feature is enabled, files ending in `.gz` are automatically
+/// decompressed.
 pub fn parse_auto_file_multi<P: AsRef<std::path::Path>>(path: P) -> Result<Vec<Molecule>> {
-    let content = std::fs::read_to_string(&path)?;
+    #[cfg(feature = "gzip")]
+    let content = super::compression::read_maybe_gz_to_string(&path)?;
+
+    #[cfg(not(feature = "gzip"))]
+    let content = {
+        if path
+            .as_ref()
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("gz"))
+        {
+            return Err(SdfError::GzipNotEnabled);
+        }
+        std::fs::read_to_string(&path)?
+    };
+
     match detect_format(&content) {
         FileFormat::SdfV2000 => {
             let cursor = std::io::Cursor::new(content);
@@ -753,9 +905,24 @@ pub fn parse_auto_file_multi<P: AsRef<std::path::Path>>(path: P) -> Result<Vec<M
             let iter = SdfIterator::new(reader);
             iter.collect()
         }
-        FileFormat::SdfV3000 => super::sdf_v3000::parse_sdf_v3000_file_multi(path),
-        FileFormat::Mol2 => super::mol2::parse_mol2_file_multi(path),
-        FileFormat::Xyz => super::xyz::parse_xyz_file_multi(path),
+        FileFormat::SdfV3000 => {
+            let cursor = std::io::Cursor::new(content);
+            let reader = std::io::BufReader::new(cursor);
+            let iter = super::sdf_v3000::SdfV3000Iterator::new(reader);
+            iter.collect()
+        }
+        FileFormat::Mol2 => {
+            let cursor = std::io::Cursor::new(content);
+            let reader = std::io::BufReader::new(cursor);
+            let iter = super::mol2::Mol2Iterator::new(reader);
+            iter.collect()
+        }
+        FileFormat::Xyz => {
+            let cursor = std::io::Cursor::new(content);
+            let reader = std::io::BufReader::new(cursor);
+            let iter = super::xyz::XyzIterator::new(reader);
+            iter.collect()
+        }
     }
 }
 
@@ -766,6 +933,9 @@ pub type AutoIterator = Box<dyn Iterator<Item = Result<Molecule>>>;
 ///
 /// This function reads the file, detects whether it is SDF V2000, V3000,
 /// MOL2, or XYZ format, and returns an appropriate iterator.
+///
+/// When the `gzip` feature is enabled, files ending in `.gz` are automatically
+/// decompressed.
 ///
 /// # Example
 ///
@@ -779,8 +949,21 @@ pub type AutoIterator = Box<dyn Iterator<Item = Result<Molecule>>>;
 /// }
 /// ```
 pub fn iter_auto_file<P: AsRef<std::path::Path>>(path: P) -> Result<AutoIterator> {
-    // Read enough to detect format (first few lines)
-    let content = std::fs::read_to_string(&path)?;
+    #[cfg(feature = "gzip")]
+    let content = super::compression::read_maybe_gz_to_string(&path)?;
+
+    #[cfg(not(feature = "gzip"))]
+    let content = {
+        if path
+            .as_ref()
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("gz"))
+        {
+            return Err(SdfError::GzipNotEnabled);
+        }
+        std::fs::read_to_string(&path)?
+    };
+
     let format = detect_format(&content);
 
     match format {

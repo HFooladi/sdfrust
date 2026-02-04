@@ -9,6 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Transparent Gzip Decompression** (`src/parser/compression.rs`)
+  - Optional feature: enable with `--features gzip`
+  - Automatic decompression of `.gz` files based on extension
+  - `MaybeGzReader` enum for transparent handling of plain and gzipped files
+  - Helper functions: `open_maybe_gz()`, `is_gzip_path()`, `read_maybe_gz_to_string()`
+  - Works with all parsers: SDF V2000, V3000, MOL2, XYZ
+  - Works with all file functions: `parse_*_file()`, `parse_*_file_multi()`, `iter_*_file()`
+  - Case-insensitive extension matching (`.gz`, `.GZ`, `.Gz`)
+  - `GzipNotEnabled` error with helpful message when feature is disabled
+
+- **Python Gzip Bindings**
+  - `gzip_enabled()` function to check if gzip support is compiled in
+  - All file parsing functions transparently support `.gz` files
+  - All iterators support gzipped files
+  - 16 pytest tests for gzip functionality
+
 - **XYZ Format Parser** (`src/parser/xyz.rs`)
   - Parse XYZ molecular coordinate files (coordinates only, no bonds)
   - `XyzParser<R>` and `XyzIterator<R>` for streaming parsing

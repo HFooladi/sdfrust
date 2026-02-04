@@ -15,10 +15,12 @@ Quick Start:
 Features:
     - Parse SDF V2000 and V3000 formats
     - Parse TRIPOS MOL2 format
+    - Parse XYZ format
     - Write SDF V2000 and V3000 formats
     - Memory-efficient streaming iterators for large files
     - Molecular descriptors (MW, exact mass, ring count, etc.)
     - NumPy integration for coordinate arrays (optional)
+    - Transparent gzip decompression (optional, check with gzip_enabled())
 """
 
 from sdfrust._sdfrust import (
@@ -86,6 +88,8 @@ from sdfrust._sdfrust import (
     iter_sdf_v3000_file,
     iter_mol2_file,
     iter_xyz_file,
+    # Utility functions
+    gzip_enabled,
 )
 
 __all__ = [
@@ -153,4 +157,6 @@ __all__ = [
     "iter_sdf_v3000_file",
     "iter_mol2_file",
     "iter_xyz_file",
+    # Utility functions
+    "gzip_enabled",
 ]

@@ -50,6 +50,9 @@ pub enum SdfError {
 
     #[error("Unsupported V3000 feature: {0}")]
     UnsupportedV3000Feature(String),
+
+    #[error("Gzip file detected but gzip feature not enabled. Enable with: --features gzip")]
+    GzipNotEnabled,
 }
 
 /// Result type alias for SDF operations.

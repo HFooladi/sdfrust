@@ -291,27 +291,85 @@ pub fn parse_xyz_string_multi(content: &str) -> Result<Vec<Molecule>> {
 }
 
 /// Parses a single molecule from an XYZ file.
+///
+/// When the `gzip` feature is enabled, files ending in `.gz` are automatically
+/// decompressed.
 pub fn parse_xyz_file<P: AsRef<std::path::Path>>(path: P) -> Result<Molecule> {
-    let file = std::fs::File::open(path)?;
-    let reader = std::io::BufReader::new(file);
-    let mut parser = XyzParser::new(reader);
+    #[cfg(feature = "gzip")]
+    {
+        let reader = super::compression::open_maybe_gz(&path)?;
+        let mut parser = XyzParser::new(reader);
+        parser.parse_molecule()?.ok_or(SdfError::EmptyFile)
+    }
 
-    parser.parse_molecule()?.ok_or(SdfError::EmptyFile)
+    #[cfg(not(feature = "gzip"))]
+    {
+        if path
+            .as_ref()
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("gz"))
+        {
+            return Err(SdfError::GzipNotEnabled);
+        }
+        let file = std::fs::File::open(path)?;
+        let reader = std::io::BufReader::new(file);
+        let mut parser = XyzParser::new(reader);
+        parser.parse_molecule()?.ok_or(SdfError::EmptyFile)
+    }
 }
 
 /// Parses all molecules from an XYZ file.
+///
+/// When the `gzip` feature is enabled, files ending in `.gz` are automatically
+/// decompressed.
 pub fn parse_xyz_file_multi<P: AsRef<std::path::Path>>(path: P) -> Result<Vec<Molecule>> {
-    let file = std::fs::File::open(path)?;
-    let reader = std::io::BufReader::new(file);
-    let iter = XyzIterator::new(reader);
+    #[cfg(feature = "gzip")]
+    {
+        let reader = super::compression::open_maybe_gz(&path)?;
+        let iter = XyzIterator::new(reader);
+        iter.collect()
+    }
 
-    iter.collect()
+    #[cfg(not(feature = "gzip"))]
+    {
+        if path
+            .as_ref()
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("gz"))
+        {
+            return Err(SdfError::GzipNotEnabled);
+        }
+        let file = std::fs::File::open(path)?;
+        let reader = std::io::BufReader::new(file);
+        let iter = XyzIterator::new(reader);
+        iter.collect()
+    }
 }
 
 /// Returns an iterator over molecules in an XYZ file.
+///
+/// When the `gzip` feature is enabled, files ending in `.gz` are automatically
+/// decompressed. Note that the return type differs based on the feature flag.
+#[cfg(feature = "gzip")]
+pub fn iter_xyz_file<P: AsRef<std::path::Path>>(
+    path: P,
+) -> Result<XyzIterator<super::compression::MaybeGzReader>> {
+    let reader = super::compression::open_maybe_gz(&path)?;
+    Ok(XyzIterator::new(reader))
+}
+
+/// Returns an iterator over molecules in an XYZ file.
+#[cfg(not(feature = "gzip"))]
 pub fn iter_xyz_file<P: AsRef<std::path::Path>>(
     path: P,
 ) -> Result<XyzIterator<std::io::BufReader<std::fs::File>>> {
+    if path
+        .as_ref()
+        .extension()
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("gz"))
+    {
+        return Err(SdfError::GzipNotEnabled);
+    }
     let file = std::fs::File::open(path)?;
     let reader = std::io::BufReader::new(file);
     Ok(XyzIterator::new(reader))

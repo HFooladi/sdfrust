@@ -3,6 +3,11 @@ pub mod sdf;
 pub mod sdf_v3000;
 pub mod xyz;
 
+#[cfg(feature = "gzip")]
+pub mod compression;
+#[cfg(feature = "gzip")]
+pub use compression::{MaybeGzReader, is_gzip_path, open_maybe_gz, read_maybe_gz_to_string};
+
 pub use sdf::{
     AutoIterator, FileFormat, SdfIterator, SdfParser, detect_format, detect_sdf_format,
     iter_auto_file, iter_sdf_file, parse_auto_file, parse_auto_file_multi, parse_auto_string,

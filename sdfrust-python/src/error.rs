@@ -56,5 +56,8 @@ pub fn convert_error(err: SdfError) -> PyErr {
         SdfError::UnsupportedV3000Feature(feature) => {
             PyValueError::new_err(format!("Unsupported V3000 feature: {}", feature))
         }
+        SdfError::GzipNotEnabled => {
+            PyValueError::new_err("Gzip file detected but gzip feature not enabled. Rebuild with: maturin develop --features gzip")
+        }
     }
 }

@@ -213,7 +213,7 @@ open target/criterion/report/index.html
 - [x] `write_sdf_auto()` - auto-selects V2000/V3000 based on molecule needs
 - [x] `needs_v3000()` - checks if molecule requires V3000 format
 - [ ] Detect format from file extension (.sdf, .mol, .mol2, .xyz) - deferred
-- [ ] Gzip support (transparent decompression) - deferred
+- [x] Gzip support (transparent decompression) - see Phase 9.8
 
 ---
 
@@ -442,6 +442,88 @@ fmt = sdfrust.detect_format(content)  # Returns "xyz"
 - XYZ format contains no bond information; `mol.bonds` will be empty
 - Molecule name is taken from the comment line (line 2)
 - Format detection checks: first line is integer, third line has element + 3 floats
+
+---
+
+## Phase 9.8: Transparent Gzip Decompression ✅ COMPLETE
+
+**Status:** Implemented and tested
+
+### Deliverables
+- [x] Optional gzip feature (`--features gzip`)
+- [x] Automatic decompression of `.gz` files based on extension
+- [x] `MaybeGzReader` enum for transparent handling (no dynamic dispatch)
+- [x] Helper functions: `open_maybe_gz()`, `is_gzip_path()`, `read_maybe_gz_to_string()`
+- [x] Works with all parsers: SDF V2000, V3000, MOL2, XYZ
+- [x] Works with all file functions: `parse_*_file()`, `parse_*_file_multi()`, `iter_*_file()`
+- [x] Case-insensitive extension matching (`.gz`, `.GZ`, `.Gz`)
+- [x] `GzipNotEnabled` error with helpful message when feature is disabled
+- [x] Full Python bindings with `gzip_enabled()` function
+
+### Module Structure
+```
+src/parser/
+└── compression.rs     # MaybeGzReader enum and helper functions
+```
+
+### API
+```rust
+// Rust API (with gzip feature)
+use sdfrust::{parse_sdf_file, iter_sdf_file};
+
+// Transparently handles gzipped files
+let mol = parse_sdf_file("molecule.sdf.gz")?;
+
+// Iterators also work with gzipped files
+for result in iter_sdf_file("large.sdf.gz")? {
+    let mol = result?;
+    process(mol);
+}
+
+// Auto-detection works with gzipped files
+let mol = parse_auto_file("molecule.mol2.gz")?;
+
+// Check gzip path detection
+use sdfrust::parser::is_gzip_path;
+assert!(is_gzip_path("test.sdf.gz"));
+```
+
+### Python API
+```python
+import sdfrust
+
+# Check if gzip support is available
+if sdfrust.gzip_enabled():
+    # All file functions transparently support .gz files
+    mol = sdfrust.parse_sdf_file("molecule.sdf.gz")
+
+    # Iterators work too
+    for mol in sdfrust.iter_sdf_file("large.sdf.gz"):
+        process(mol)
+```
+
+### Test Coverage
+- 24 Rust integration tests in `tests/gzip_tests.rs`
+- 16 Python tests in `tests/test_gzip.py`
+- Edge cases: empty files, case variations, plain files with gzip feature
+
+### Build Options
+```bash
+# Build without gzip (default, smaller binary)
+cargo build
+
+# Build with gzip support
+cargo build --features gzip
+
+# Python bindings with gzip
+maturin develop --features gzip
+```
+
+### Design Notes
+- Uses `flate2` crate for gzip decompression
+- `MaybeGzReader` enum avoids `Box<dyn BufRead>` overhead
+- Extension-based detection (not magic bytes) for simplicity
+- Read-only: writing gzip files not supported (use external tools)
 
 ---
 

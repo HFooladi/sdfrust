@@ -14,6 +14,23 @@ pub mod molecule;
 pub mod parsing;
 pub mod writing;
 
+/// Check if gzip support is enabled.
+///
+/// Returns True if the library was compiled with gzip support,
+/// allowing parsing of `.gz` compressed files.
+///
+/// Example:
+///     >>> import sdfrust
+///     >>> if sdfrust.gzip_enabled():
+///     ...     mol = sdfrust.parse_sdf_file("molecule.sdf.gz")
+///     ... else:
+///     ...     print("Gzip support not available")
+#[pyfunction]
+#[pyo3(name = "gzip_enabled")]
+fn py_gzip_enabled() -> bool {
+    cfg!(feature = "gzip")
+}
+
 use atom::PyAtom;
 use bond::{PyBond, PyBondOrder, PyBondStereo};
 use iterators::{PyMol2Iterator, PySdfIterator, PySdfV3000Iterator, PyXyzIterator};
@@ -35,10 +52,12 @@ use molecule::{PyMolecule, PySdfFormat};
 /// Features:
 ///     - Parse SDF V2000 and V3000 formats
 ///     - Parse TRIPOS MOL2 format
+///     - Parse XYZ format
 ///     - Write SDF V2000 and V3000 formats
 ///     - Memory-efficient streaming iterators for large files
 ///     - Molecular descriptors (MW, exact mass, ring count, etc.)
 ///     - NumPy integration for coordinate arrays (optional)
+///     - Transparent gzip decompression (optional, requires gzip feature)
 #[pymodule]
 fn _sdfrust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Version
@@ -123,6 +142,9 @@ fn _sdfrust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(iterators::py_iter_sdf_v3000_file, m)?)?;
     m.add_function(wrap_pyfunction!(iterators::py_iter_mol2_file, m)?)?;
     m.add_function(wrap_pyfunction!(iterators::py_iter_xyz_file, m)?)?;
+
+    // Utility functions
+    m.add_function(wrap_pyfunction!(py_gzip_enabled, m)?)?;
 
     Ok(())
 }
