@@ -14,7 +14,7 @@ name = "_sdfrust"
 crate-type = ["cdylib"]
 
 [dependencies]
-pyo3 = { version = "0.23", features = ["extension-module"] }
+pyo3 = { version = "0.28", features = ["extension-module"] }
 sdfrust = { path = ".." }
 numpy = { version = "0.23", optional = true }
 
