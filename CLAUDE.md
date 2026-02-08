@@ -105,6 +105,7 @@ tests/                         # Rust integration tests
 ├── v3000_tests.rs             # SDF V3000 tests
 ├── descriptor_tests.rs        # Molecular descriptor tests
 ├── xyz_tests.rs               # XYZ format integration tests
+├── pdbbind_benchmark.rs       # PDBbind 2024 large-scale benchmark (#[ignore])
 └── test_data/
     ├── aspirin.sdf            # PubChem CID 2244
     ├── caffeine_pubchem.sdf   # PubChem CID 2519
@@ -172,6 +173,16 @@ cargo test test_aspirin       # Tests containing "aspirin"
 cargo test pubchem --nocapture # PubChem tests with output
 cargo test -- --test-threads=1 # Sequential execution
 ```
+
+### Running PDBbind Benchmark
+
+A large-scale benchmark test (`tests/pdbbind_benchmark.rs`) validates SDF parsing against the PDBbind 2024 dataset (~27,670 ligand SDF files). It is marked `#[ignore]` and requires the `PDBBIND_2024_DIR` environment variable:
+
+```bash
+PDBBIND_2024_DIR=/path/to/PDBbind_2024 cargo test --release pdbbind_benchmark -- --ignored --nocapture
+```
+
+The test reports success/failure rates, error categories, molecule statistics (atom/bond counts, element frequencies), and throughput. It gracefully skips if the env var is unset or the directory is missing.
 
 ## GitHub CI/CD
 
