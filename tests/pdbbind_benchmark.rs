@@ -1,4 +1,4 @@
-use sdfrust::{parse_sdf_file, SdfError};
+use sdfrust::{SdfError, parse_sdf_file};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::Instant;
@@ -70,10 +70,9 @@ fn pdbbind_benchmark() {
                 continue;
             }
             let pdb_id = entry.file_name();
-            let sdf_file = entry.path().join(format!(
-                "{}_ligand.sdf",
-                pdb_id.to_string_lossy()
-            ));
+            let sdf_file = entry
+                .path()
+                .join(format!("{}_ligand.sdf", pdb_id.to_string_lossy()));
             if sdf_file.exists() {
                 paths.push(sdf_file);
             }
@@ -143,10 +142,8 @@ fn pdbbind_benchmark() {
                     let category = categorize_error(&e);
                     *error_counts.entry(category).or_insert(0) += 1;
                     if failed_files.len() < 20 {
-                        failed_files.push((
-                            file_path.to_string_lossy().to_string(),
-                            format!("{}", e),
-                        ));
+                        failed_files
+                            .push((file_path.to_string_lossy().to_string(), format!("{}", e)));
                     }
                 }
             }
