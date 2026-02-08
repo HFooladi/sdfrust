@@ -1,265 +1,97 @@
-# CLAUDE.md - AI Development Guide for sdfrust
+# CLAUDE.md
 
-This document provides context for AI assistants working on this codebase.
+Pure-Rust library for parsing/writing SDF (V2000/V3000), MOL2, and XYZ chemical structure files. Python bindings via PyO3 in `sdfrust-python/`.
 
-## Project Overview
-
-**sdfrust** is a pure-Rust library for parsing and writing SDF (Structure Data File), MOL2, and XYZ chemical structure files. It focuses on fast, safe file I/O for small molecule data.
-
-## Architecture
-
-### Core Modules
-
-```
-src/
-├── lib.rs              # Public API exports
-├── error.rs            # Error types (SdfError)
-├── atom.rs             # Atom struct (coords, element, charge)
-├── bond.rs             # Bond, BondOrder, BondStereo
-├── molecule.rs         # Molecule container + methods
-├── parser/
-│   ├── mod.rs          # Parser exports
-│   ├── sdf.rs          # SDF V2000 parser + iterator + auto-detection
-│   ├── sdf_v3000.rs    # SDF V3000 parser + iterator
-│   ├── mol2.rs         # TRIPOS MOL2 parser + iterator
-│   └── xyz.rs          # XYZ parser + iterator
-├── writer/
-│   ├── mod.rs          # Writer exports
-│   ├── sdf.rs          # SDF V2000 writer
-│   └── sdf_v3000.rs    # SDF V3000 writer + auto-format
-├── descriptors/
-│   ├── mod.rs          # Descriptor exports
-│   ├── elements.rs     # Element data table
-│   ├── molecular.rs    # MW, exact mass, heavy atom count
-│   └── topological.rs  # Ring count, rotatable bonds
-├── sgroup.rs           # SGroup types (V3000)
-├── stereogroup.rs      # Stereogroup types (V3000)
-└── collection.rs       # Collection types (V3000)
-
-sdfrust-python/         # Python bindings (PyO3)
-├── src/
-│   ├── lib.rs          # PyO3 module registration
-│   ├── error.rs        # Error conversion
-│   ├── atom.rs         # PyAtom wrapper
-│   ├── bond.rs         # PyBond, PyBondOrder, PyBondStereo
-│   ├── molecule.rs     # PyMolecule wrapper + NumPy support
-│   ├── parsing.rs      # Parsing functions
-│   ├── writing.rs      # Writing functions
-│   └── iterators.rs    # Iterator wrappers
-├── python/sdfrust/     # Python package
-└── tests/              # pytest tests
-```
-
-### Key Types
-
-- `Molecule`: Main container with atoms, bonds, and properties
-- `Atom`: Represents an atom with 3D coordinates, element, charge
-- `Bond`: Connects two atoms with order (single/double/triple/aromatic) and stereo
-- `BondOrder`: Enum for bond types (1-10 as per SDF spec, including V3000 types)
-- `SdfFormat`: Enum for V2000/V3000 format
-- `SdfParser<R>`: Streaming SDF V2000 parser from any `BufRead`
-- `SdfV3000Parser<R>`: Streaming SDF V3000 parser
-- `SdfIterator<R>`: Iterator over molecules in multi-molecule SDF files
-- `Mol2Parser<R>`: Streaming MOL2 parser from any `BufRead`
-- `Mol2Iterator<R>`: Iterator over molecules in multi-molecule MOL2 files
-- `XyzParser<R>`: Streaming XYZ parser from any `BufRead`
-- `XyzIterator<R>`: Iterator over molecules in multi-molecule XYZ files
-- `FileFormat`: Enum for detected format (SdfV2000, SdfV3000, Mol2, Xyz)
-- `StereoGroup`, `SGroup`, `Collection`: V3000-specific structures
-
-### Design Patterns
-
-1. **Streaming Parsing**: Uses `BufRead` trait for memory-efficient large file handling
-2. **Zero-based Indexing**: Internal indices are 0-based (SDF uses 1-based)
-3. **Properties as HashMap**: SDF data block stored as key-value pairs
-4. **Owned Strings**: Atoms/bonds own their data (no lifetimes)
-
-## Build Commands
+## Build & Test
 
 ```bash
-# Rust library
-cargo build              # Build library
-cargo test               # Run all tests
-cargo test pubchem       # Run PubChem validation tests
-cargo doc --open         # Generate documentation
-cargo clippy             # Run linter
-cargo build --workspace  # Build all crates including Python bindings
+cargo build                    # Build
+cargo test                     # Run all tests (260+ Rust + doc-tests)
+cargo clippy                   # Lint
+cargo build --workspace        # Include Python bindings crate
 
 # Python bindings
-cd sdfrust-python
-uv venv .venv --python 3.11
-source .venv/bin/activate
-uv pip install maturin numpy pytest
-maturin develop --features numpy  # Build and install in dev mode
-pytest tests/ -v                   # Run Python tests
-```
+cd sdfrust-python && source .venv/bin/activate
+maturin develop --features numpy
+pytest tests/ -v               # 41 Python tests
 
-## Test Structure
-
-```
-tests/                         # Rust integration tests
-├── sdf_parsing_tests.rs       # Basic SDF V2000 functionality
-├── pubchem_tests.rs           # Real PubChem molecules
-├── edge_case_tests.rs         # Edge case handling
-├── mol2_tests.rs              # MOL2 integration tests
-├── v3000_tests.rs             # SDF V3000 tests
-├── descriptor_tests.rs        # Molecular descriptor tests
-├── xyz_tests.rs               # XYZ format integration tests
-├── pdbbind_benchmark.rs       # PDBbind 2024 large-scale benchmark (#[ignore])
-└── test_data/
-    ├── aspirin.sdf            # PubChem CID 2244
-    ├── caffeine_pubchem.sdf   # PubChem CID 2519
-    ├── glucose.sdf            # PubChem CID 5988 (sucrose)
-    ├── galactose.sdf          # PubChem CID 5793
-    ├── acetaminophen.sdf      # PubChem CID 1983
-    ├── methionine.sdf         # PubChem CID 6137
-    ├── methane.mol2           # Simple MOL2 test file
-    ├── benzene.mol2           # Aromatic MOL2 test file
-    ├── water.xyz              # Simple XYZ test file
-    └── multi.xyz              # Multi-molecule XYZ test file
-
-sdfrust-python/tests/          # Python tests
-└── test_basic.py              # 41 pytest tests
-```
-
-Total: 260+ Rust tests (unit + integration) + 41 Python tests
-
-## SDF Format Reference
-
-### V2000 Structure
-```
-Molecule Name           <- Line 1: name (any string)
-  Program  Timestamp    <- Line 2: usually blank or program info
-Comment line            <- Line 3: comment
-aaabbb...V2000          <- Line 4: counts (aaa=atoms, bbb=bonds)
-x y z elem ...          <- Atom block (one line per atom)
-111222ttt...            <- Bond block (111=atom1, 222=atom2, ttt=type)
-M  CHG  n ...           <- Property block
-M  END                  <- End of mol
-> <PROPERTY_NAME>       <- Data block
-value
-                        <- Blank line between properties
-$$$$                    <- End of record
-```
-
-### Key Parsing Details
-
-1. **Coordinates**: Positions 0-9, 10-19, 20-29 (10 chars each, 4 decimals)
-2. **Element**: Positions 31-33 (3 chars, left-aligned)
-3. **Charge Code**: Position 36-38 (0=none, 1=+3, 2=+2, 3=+1, 5=-1, 6=-2, 7=-3)
-4. **Bond Atoms**: Positions 0-2, 3-5 (1-based indices!)
-5. **Bond Type**: Position 6-8 (1=single, 2=double, 3=triple, 4=aromatic)
-
-## Common Development Tasks
-
-### Adding a New Feature
-
-1. Create feature module in `src/`
-2. Add to `lib.rs` exports
-3. Write unit tests in `tests/`
-4. Update ROADMAP.md
-
-### Adding New File Format
-
-1. Create parser in `src/parser/<format>.rs`
-2. Map to `Molecule` struct
-3. Add tests with real-world files
-4. Update ROADMAP.md
-
-### Running Specific Tests
-
-```bash
-cargo test test_aspirin       # Tests containing "aspirin"
-cargo test pubchem --nocapture # PubChem tests with output
-cargo test -- --test-threads=1 # Sequential execution
-```
-
-### Running PDBbind Benchmark
-
-A large-scale benchmark test (`tests/pdbbind_benchmark.rs`) validates SDF parsing against the PDBbind 2024 dataset (~27,670 ligand SDF files). It is marked `#[ignore]` and requires the `PDBBIND_2024_DIR` environment variable:
-
-```bash
+# PDBbind benchmark (~27k files, requires dataset)
 PDBBIND_2024_DIR=/path/to/PDBbind_2024 cargo test --release pdbbind_benchmark -- --ignored --nocapture
 ```
 
-The test reports success/failure rates, error categories, molecule statistics (atom/bond counts, element frequencies), and throughput. It gracefully skips if the env var is unset or the directory is missing.
+## Code Conventions
 
-## GitHub CI/CD
-
-GitHub Actions workflows are configured in `.github/workflows/rust.yml`. Use `gh` to interact with GitHub:
-
-```bash
-gh run list                    # List recent workflow runs
-gh run view <run_id>           # View details of a specific run
-gh run view <run_id> --log     # View full logs
-gh run watch <run_id>          # Watch a run until completion
-gh pr list                     # List pull requests
-gh pr view <pr_number>         # View PR details
-```
-
-## Code Style
-
-- Use `thiserror` for error types
-- Return `Result<T, SdfError>` from fallible operations
+- `thiserror` for error types; return `Result<T, SdfError>` from fallible operations
 - Prefer iterators over index loops
-- Use `BufRead` trait for input (not concrete types)
-- All public items need documentation
+- Use `BufRead` trait for parser input (not concrete types)
+- All public items need doc comments
+- Internal indices are 0-based (file formats use 1-based — convert at parse/write boundaries)
+- Atoms/bonds own their data (no lifetimes)
+- Properties stored as `HashMap<String, String>` on `Molecule`
 
-## Related Projects
+## Architecture
 
-- **pdbrust**: Sister project for PDB/mmCIF files (same author)
-- **chemcore**: Another Rust cheminformatics library (proof-of-concept)
-- **rdkit-rs**: RDKit bindings (requires C++)
-
-## MOL2 Format Reference
-
-### Structure
 ```
-@<TRIPOS>MOLECULE         <- Section header
-molecule_name             <- Molecule name
-num_atoms num_bonds ...   <- Counts line
-mol_type                  <- SMALL, BIOPOLYMER, etc.
-charge_type               <- NO_CHARGES, USER_CHARGES, etc.
+src/
+├── lib.rs                 # Public API re-exports
+├── error.rs               # SdfError enum (17 variants)
+├── atom.rs                # Atom struct (index, element, x/y/z, charge)
+├── bond.rs                # Bond, BondOrder, BondStereo
+├── molecule.rs            # Molecule container + SdfFormat enum
+├── parser/
+│   ├── sdf.rs             # V2000 parser + auto-detection + unified parse_auto_*
+│   ├── sdf_v3000.rs       # V3000 parser
+│   ├── mol2.rs            # MOL2 parser
+│   └── xyz.rs             # XYZ parser
+├── writer/
+│   ├── sdf.rs             # V2000 writer
+│   ├── sdf_v3000.rs       # V3000 writer + auto-format selection
+│   └── mol2.rs            # MOL2 writer
+├── descriptors/
+│   ├── elements.rs        # Periodic table data
+│   ├── molecular.rs       # MW, exact mass, heavy atom count
+│   └── topological.rs     # Ring count, rotatable bonds
+├── sgroup.rs              # SGroup types (V3000)
+├── stereogroup.rs         # Stereogroup types (V3000)
+└── collection.rs          # Collection types (V3000)
 
-@<TRIPOS>ATOM             <- Atom section
-atom_id name x y z type [subst_id subst_name charge]
-
-@<TRIPOS>BOND             <- Bond section
-bond_id atom1 atom2 type  <- type: 1, 2, 3, ar, am
-```
-
-### Key Parsing Details
-
-1. **Section Headers**: Start with `@<TRIPOS>`
-2. **Atom Types**: SYBYL types like "C.ar", "N.pl3" - element extracted before "."
-3. **Bond Types**: "1" (single), "2" (double), "3" (triple), "ar" (aromatic)
-4. **Atom Indices**: 1-based in file, converted to 0-based internally
-
-## XYZ Format Reference
-
-### Structure
-```
-3                        <- Line 1: atom count (integer)
-water molecule           <- Line 2: comment/title (molecule name)
-O  0.000000  0.000000  0.117300    <- element x y z (whitespace-separated)
-H  0.756950  0.000000 -0.469200
-H -0.756950  0.000000 -0.469200
+sdfrust-python/src/        # PyO3 bindings (mirrors Rust API)
 ```
 
-Multi-molecule files concatenate blocks (no delimiter between molecules).
+Each parser follows the same pattern: `Parser<R: BufRead>` for streaming + `Iterator<R>` for multi-molecule files. Top-level convenience functions: `parse_*_file()`, `parse_*_string()`, `parse_*_file_multi()`, `iter_*_file()`.
 
-### Key Parsing Details
+## Key API
 
-1. **Atom Count**: First line must be a positive integer
-2. **Comment Line**: Second line becomes molecule name (can be empty)
-3. **Atom Lines**: Element symbol (or atomic number) followed by x, y, z coordinates
-4. **Element Identifiers**: Accepts symbols ("C", "O") or atomic numbers (6, 8)
-5. **Case Normalization**: Elements normalized to proper case (ca → Ca, CL → Cl)
-6. **Extra Columns**: Any columns after x, y, z are ignored
-7. **No Bonds**: XYZ format contains no bond information (bonds array is empty)
+- `parse_sdf_file(path)` / `parse_sdf_string(s)` — single molecule
+- `parse_sdf_file_multi(path)` — all molecules into Vec
+- `iter_sdf_file(path)` — streaming iterator (memory-efficient)
+- `parse_auto_file(path)` — auto-detect format (SDF/MOL2/XYZ)
+- `write_sdf_file(mol, path)` / `write_sdf_auto_file(mol, path)` — V2000 or auto V2000/V3000
+- `Molecule`: `atom_count()`, `bond_count()`, `formula()`, `centroid()`, `neighbors(idx)`, `element_counts()`, `atoms_by_element(elem)`, `get_property(key)`, `set_property(key, val)`
+- `Atom`: fields `index`, `element`, `x`, `y`, `z`, `formal_charge`
+- `Bond`: fields `atom1`, `atom2`, `order` (BondOrder enum), `stereo`
+
+## Development Workflows
+
+**Adding a feature**: Create module in `src/` → add to `lib.rs` exports → write tests in `tests/` → update ROADMAP.md
+
+**Adding a file format**: Create parser in `src/parser/<fmt>.rs` → map to `Molecule` → add integration tests with real files → add writer if needed → update ROADMAP.md
+
+## Test Data
+
+Test files in `tests/test_data/`: `aspirin.sdf`, `caffeine_pubchem.sdf`, `glucose.sdf`, `galactose.sdf`, `acetaminophen.sdf`, `methionine.sdf`, `methane.mol2`, `benzene.mol2`, `water.xyz`, `multi.xyz`
+
+## CI/CD
+
+GitHub Actions: `.github/workflows/rust.yml`. Use `gh run list`, `gh run view <id>`, `gh pr list`.
+
+## Format Gotchas
+
+- **SDF V2000**: Fixed-width columns. Coordinates at positions 0-9, 10-19, 20-29. Element at 31-33. Bond atoms at 0-2, 3-5 (1-based!). Charge codes are inverted: 1=+3, 2=+2, 3=+1, 5=-1, 6=-2, 7=-3.
+- **SDF V3000**: Variable-width, prefixed with `M  V30`. Supports >999 atoms, stereogroups, sgroups, extended bond types (hydrogen, ionic, coordination).
+- **MOL2**: Section headers `@<TRIPOS>`. SYBYL atom types like `C.ar` — element extracted before `.`. Bond type `ar` for aromatic.
+- **XYZ**: No bonds. Element can be symbol or atomic number. Case-normalized. Multi-molecule files are concatenated blocks.
 
 ## Roadmap
 
-See [ROADMAP.md](ROADMAP.md) for detailed development phases.
-
-Current status: Phase 9.7 (XYZ Parser) complete. Next: Phase 10 (Shared Traits).
+Phase 9.7 (XYZ Parser) complete. Next: Phase 10 (Shared Traits). See ROADMAP.md.

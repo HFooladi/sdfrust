@@ -182,6 +182,38 @@ Based on implementation characteristics:
    - Criterion: `target/criterion/report/index.html`
    - Comparison: `BENCHMARK_RESULTS.md` (regenerated)
 
+## Real-World Validation: PDBbind 2024
+
+The library has been validated against the PDBbind 2024 dataset, which contains real-world ligand SDF files from protein-ligand crystal structures.
+
+| Metric | Value |
+|--------|-------|
+| Total files | 27,670 |
+| Success rate | 100.00% |
+| Throughput | ~14,000 files/sec |
+| Parse time | ~2s (release build) |
+
+### Per Year-Range Breakdown
+
+| Range | Files | Success |
+|-------|-------|---------|
+| 1981-2000 | 1,234 | 100% |
+| 2001-2010 | 6,213 | 100% |
+| 2011-2020 | 15,455 | 100% |
+| 2021-2023 | 4,483 | 100% |
+
+### Molecule Statistics
+
+- Atoms: min=6, max=370, avg=60.6
+- Bonds: min=5, max=380, avg=62.6
+- 20 distinct elements observed (H, C, O, N, S, F, P, Cl, Br, B, I, Se, Fe, Ru, Si, Ir, Co, As, Cu, V)
+
+To reproduce:
+
+```bash
+PDBBIND_2024_DIR=/path/to/PDBbind_2024 cargo test --release pdbbind_benchmark -- --ignored --nocapture
+```
+
 ## Historical Results
 
 Results will be tracked here as the library evolves:

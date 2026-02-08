@@ -1,15 +1,18 @@
 # sdfrust
 
-A fast, pure-Rust parser for SDF (Structure Data File) and MOL2 chemical structure files, with Python bindings.
+A fast, pure-Rust parser for SDF (Structure Data File), MOL2, and XYZ chemical structure files, with Python bindings.
 
 ## Features
 
 - **SDF V2000/V3000**: Full read/write support for both SDF format versions
-- **MOL2 (TRIPOS)**: Full read support for MOL2 format
+- **MOL2 (TRIPOS)**: Full read/write support for MOL2 format
+- **XYZ**: Read support for XYZ coordinate files (single and multi-molecule)
+- **Gzip Support**: Transparent decompression of `.gz` files (optional `gzip` feature)
 - **Python Bindings**: First-class Python API with NumPy integration
 - **Streaming Parsing**: Memory-efficient iteration over large files
 - **Molecular Descriptors**: MW, exact mass, ring count, rotatable bonds, and more
 - **High Performance**: ~220,000 molecules/sec (4-7x faster than RDKit)
+- **Real-World Validated**: 100% success rate on PDBbind 2024 dataset (27,670 ligand SDF files)
 
 ## Installation
 
@@ -36,10 +39,13 @@ maturin develop --features numpy
 ### Rust
 
 ```rust
-use sdfrust::{parse_sdf_file, parse_mol2_file, write_sdf_file};
+use sdfrust::{parse_sdf_file, parse_mol2_file, parse_xyz_file, parse_auto_file, write_sdf_file};
 
-// Parse a single molecule
+// Parse a single molecule (any format)
 let mol = parse_sdf_file("molecule.sdf")?;
+let mol = parse_mol2_file("molecule.mol2")?;
+let mol = parse_xyz_file("coords.xyz")?;
+let mol = parse_auto_file("unknown_format.sdf")?; // Auto-detect
 println!("Name: {}", mol.name);
 println!("Atoms: {}", mol.atom_count());
 println!("Formula: {}", mol.formula());
@@ -193,7 +199,9 @@ mol.bonds_by_order(BondOrder::Double)
 |--------|------|-------|
 | SDF V2000 | ✅ | ✅ |
 | SDF V3000 | ✅ | ✅ |
-| MOL2 (TRIPOS) | ✅ | - |
+| MOL2 (TRIPOS) | ✅ | ✅ |
+| XYZ | ✅ | - |
+| Gzip (`.gz`) | ✅ | - |
 
 ### Format Auto-Detection
 
