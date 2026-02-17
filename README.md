@@ -1,5 +1,10 @@
 # sdfrust
 
+[![Crates.io](https://img.shields.io/crates/v/sdfrust.svg)](https://crates.io/crates/sdfrust)
+[![docs.rs](https://docs.rs/sdfrust/badge.svg)](https://docs.rs/sdfrust)
+[![CI](https://github.com/hfooladi/sdfrust/actions/workflows/rust.yml/badge.svg)](https://github.com/hfooladi/sdfrust/actions/workflows/rust.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 A fast, pure-Rust parser for SDF (Structure Data File), MOL2, and XYZ chemical structure files, with Python bindings.
 
 ## Features
@@ -22,7 +27,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-sdfrust = "0.4"
+sdfrust = "0.5"
 ```
 
 ### Python
@@ -266,6 +271,20 @@ sdfrust.write_sdf_file_multi(mols, path)
 - `BondStereo`: Stereochemistry enum
 - `SdfFormat`: Format version enum
 
+## Citation
+
+If you use sdfrust in your research, please cite:
+
+```bibtex
+@software{fooladi2025sdfrust,
+  author = {Fooladi, Hosein},
+  title = {sdfrust: A fast, pure-Rust parser for SDF, MOL2, and XYZ chemical structure files},
+  year = {2025},
+  url = {https://github.com/hfooladi/sdfrust},
+  license = {MIT}
+}
+```
+
 ## License
 
-MIT License
+MIT License - Copyright (c) 2025-2026 Hosein Fooladi

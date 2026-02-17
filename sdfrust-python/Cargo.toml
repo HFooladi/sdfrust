@@ -1,10 +1,10 @@
 [package]
 name = "sdfrust-python"
-version = "0.4.0"
+version = "0.5.0"
 edition = "2021"
 rust-version = "1.70"
 authors = ["Hosein Fooladi"]
-description = "Python bindings for sdfrust - a fast SDF and MOL2 parser"
+description = "Python bindings for sdfrust - a fast SDF, MOL2, and XYZ parser"
 license = "MIT"
 repository = "https://github.com/hfooladi/sdfrust"
 publish = false

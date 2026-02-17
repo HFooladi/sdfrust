@@ -1,6 +1,6 @@
 # sdfrust - Python Bindings
 
-Fast Rust-based SDF and MOL2 molecular structure file parser with Python bindings.
+Fast Rust-based SDF, MOL2, and XYZ molecular structure file parser with Python bindings, including transparent gzip decompression.
 
 ## Installation
 
@@ -45,7 +45,9 @@ for mol in sdfrust.iter_sdf_file("large_database.sdf"):
 
 - **SDF V2000**: Full support for reading and writing (up to 999 atoms/bonds)
 - **SDF V3000**: Full support for reading and writing (unlimited atoms/bonds)
-- **MOL2 TRIPOS**: Full support for reading
+- **MOL2 TRIPOS**: Full support for reading and writing
+- **XYZ**: Read support for XYZ coordinate files (single and multi-molecule)
+- **Gzip**: Transparent decompression of `.gz` files for all formats
 
 ## API Reference
 

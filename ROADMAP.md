@@ -592,6 +592,7 @@ Following pdbrust conventions:
 | 0.2.0   | 3-7    | Testing, MOL2, benchmarks, SDF V3000 ✅ |
 | 0.3.0   | 8      | Basic descriptors ✅ |
 | 0.4.0   | 9      | Python bindings ✅ |
+| 0.5.0   | 9.7-9.8 | XYZ parser, gzip support ✅ |
 | 1.0.0   | 10-11  | Stable API, advanced features |
 
 ---

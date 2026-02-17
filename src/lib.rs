@@ -1,13 +1,15 @@
 //! # sdfrust
 //!
-//! A fast, pure-Rust parser for SDF (Structure Data File) and MOL2 chemical structure files.
+//! A fast, pure-Rust parser for SDF (Structure Data File), MOL2, and XYZ chemical structure files.
 //!
 //! ## Features
 //!
 //! - Parse SDF V2000 and V3000 format files (single and multi-molecule)
 //! - Parse TRIPOS MOL2 format files (single and multi-molecule)
+//! - Parse XYZ coordinate files (single and multi-molecule, atomic numbers supported)
 //! - Write SDF V2000 and V3000 format files
-//! - Automatic format detection for SDF files
+//! - Automatic format detection for SDF, MOL2, and XYZ files
+//! - Transparent gzip decompression for all file parsers (optional `gzip` feature)
 //! - Support for molecules with >999 atoms/bonds (V3000)
 //! - Enhanced stereochemistry, SGroups, and collections (V3000)
 //! - Iterate over large files without loading everything into memory

@@ -1,8 +1,8 @@
-//! Python bindings for sdfrust - a fast SDF and MOL2 molecular structure parser.
+//! Python bindings for sdfrust - a fast SDF, MOL2, and XYZ molecular structure parser.
 //!
 //! This crate provides Python bindings for the sdfrust library using PyO3.
 //! It exposes all the core functionality for parsing and writing molecular
-//! structure files in SDF and MOL2 formats.
+//! structure files in SDF, MOL2, and XYZ formats.
 
 use pyo3::prelude::*;
 
@@ -36,7 +36,7 @@ use bond::{PyBond, PyBondOrder, PyBondStereo};
 use iterators::{PyMol2Iterator, PySdfIterator, PySdfV3000Iterator, PyXyzIterator};
 use molecule::{PyMolecule, PySdfFormat};
 
-/// sdfrust - Fast Rust-based SDF and MOL2 molecular structure file parser.
+/// sdfrust - Fast Rust-based SDF, MOL2, and XYZ molecular structure file parser.
 ///
 /// This module provides high-performance parsing and writing of SDF (Structure Data File)
 /// and MOL2 (TRIPOS) molecular structure formats. It is implemented in Rust for speed
@@ -61,7 +61,7 @@ use molecule::{PyMolecule, PySdfFormat};
 #[pymodule]
 fn _sdfrust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Version
-    m.add("__version__", "0.4.0")?;
+    m.add("__version__", env!("CARGO_PKG_VERSION"))?;
 
     // Classes
     m.add_class::<PyAtom>()?;

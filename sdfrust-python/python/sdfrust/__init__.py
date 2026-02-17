@@ -1,8 +1,8 @@
 """
-sdfrust - Fast Rust-based SDF and MOL2 molecular structure file parser.
+sdfrust - Fast Rust-based SDF, MOL2, and XYZ molecular structure file parser.
 
-This package provides high-performance parsing and writing of SDF (Structure Data File)
-and MOL2 (TRIPOS) molecular structure formats. It is implemented in Rust for speed
+This package provides high-performance parsing and writing of SDF (Structure Data File),
+MOL2 (TRIPOS), and XYZ molecular structure formats. It is implemented in Rust for speed
 and safety.
 
 Quick Start:

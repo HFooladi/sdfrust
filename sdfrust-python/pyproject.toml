@@ -4,8 +4,8 @@ build-backend = "maturin"
 
 [project]
 name = "sdfrust"
-version = "0.4.0"
-description = "Fast Rust-based SDF and MOL2 molecular structure file parser"
+version = "0.5.0"
+description = "Fast Rust-based SDF, MOL2, and XYZ molecular structure file parser"
 authors = [
     {name = "Hosein Fooladi", email = "hosein@example.com"}
 ]
@@ -26,7 +26,7 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Chemistry",
     "Topic :: Scientific/Engineering :: Bio-Informatics",
 ]
-keywords = ["chemistry", "sdf", "mol2", "cheminformatics", "parsing", "molecules"]
+keywords = ["chemistry", "sdf", "mol2", "xyz", "cheminformatics", "parsing", "molecules"]
 
 [project.optional-dependencies]
 numpy = ["numpy>=1.20"]
@@ -38,6 +38,6 @@ Repository = "https://github.com/hfooladi/sdfrust"
 Documentation = "https://github.com/hfooladi/sdfrust#readme"
 
 [tool.maturin]
-features = ["pyo3/extension-module", "numpy"]
+features = ["pyo3/extension-module", "numpy", "gzip"]
 python-source = "python"
 module-name = "sdfrust._sdfrust"
