@@ -206,6 +206,26 @@ mol.add_bond(sdfrust.Bond(0, 2, sdfrust.BondOrder.single()))
 sdfrust.write_sdf_file(mol, "water.sdf")
 ```
 
+## Examples
+
+The `examples/` directory contains runnable scripts demonstrating real-world usage:
+
+| Script | Description |
+|--------|-------------|
+| [`basic_usage.py`](examples/basic_usage.py) | Core API: parsing, writing, atoms, bonds, descriptors, NumPy |
+| [`format_conversion.py`](examples/format_conversion.py) | Multi-format detection, XYZ parsing, SDF/MOL2 conversion, round-trips |
+| [`batch_analysis.py`](examples/batch_analysis.py) | Drug library processing: filtering, sorting, Lipinski analysis |
+| [`geometry_analysis.py`](examples/geometry_analysis.py) | 3D geometry: distance matrices, RMSD, rotation, transforms |
+
+```bash
+cd sdfrust-python
+maturin develop --features numpy,geometry
+python examples/basic_usage.py
+python examples/format_conversion.py
+python examples/batch_analysis.py
+python examples/geometry_analysis.py
+```
+
 ## Performance
 
 sdfrust is implemented in Rust for maximum performance. Benchmarks show it is

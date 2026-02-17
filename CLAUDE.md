@@ -81,6 +81,15 @@ Each parser follows the same pattern: `Parser<R: BufRead>` for streaming + `Iter
 
 Test files in `tests/test_data/`: `aspirin.sdf`, `caffeine_pubchem.sdf`, `glucose.sdf`, `galactose.sdf`, `acetaminophen.sdf`, `methionine.sdf`, `methane.mol2`, `benzene.mol2`, `water.xyz`, `multi.xyz`
 
+## Python Examples
+
+Example scripts in `sdfrust-python/examples/` with PubChem drug data in `examples/data/`:
+
+- `basic_usage.py` — Core API: parsing, writing, atoms, bonds, descriptors, NumPy
+- `format_conversion.py` — Multi-format detection, XYZ parsing, SDF/MOL2 conversion, round-trips
+- `batch_analysis.py` — Drug library processing: filtering, sorting, Lipinski analysis
+- `geometry_analysis.py` — 3D geometry: distance matrices, RMSD, rotation, transforms (requires `--features geometry`)
+
 ## CI/CD
 
 GitHub Actions: `.github/workflows/rust.yml`. Use `gh run list`, `gh run view <id>`, `gh pr list`.

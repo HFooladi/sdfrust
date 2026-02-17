@@ -19,13 +19,19 @@ maturin develop --features numpy
 ```bash
 # From sdfrust-python directory
 python examples/basic_usage.py
+python examples/format_conversion.py
+python examples/batch_analysis.py
+
+# Geometry examples require the geometry feature
+maturin develop --features numpy,geometry
+python examples/geometry_analysis.py
 ```
 
 ## Examples Overview
 
 ### basic_usage.py
 
-Comprehensive examples covering:
+Core functionality covering:
 
 - **Parsing SDF files**: Load molecules from V2000 and V3000 SDF files
 - **Parsing SDF strings**: Parse inline SDF content
@@ -42,6 +48,52 @@ Comprehensive examples covering:
 - **NumPy integration**: Get/set coordinates as NumPy arrays
 - **Ring detection**: Identify atoms and bonds in rings
 - **Charged atoms**: Handle formal charges
+
+### format_conversion.py
+
+Multi-format detection, parsing, and conversion:
+
+- **Format detection**: Identify SDF V2000, V3000, and MOL2 from content (`detect_format()`)
+- **Auto-detection parsing**: Parse any format with one function (`parse_auto_file()`)
+- **XYZ parsing**: Single and multi-molecule XYZ files, streaming with `iter_xyz_file()`
+- **SDF → MOL2 conversion**: Convert molecules with round-trip verification
+- **MOL2 → SDF conversion**: Convert molecules with round-trip verification
+- **Batch conversion**: Write multi-molecule SDF and MOL2 files (`write_sdf_file_multi()`, `write_mol2_file_multi()`)
+- **Gzip support**: Check runtime feature availability (`gzip_enabled()`)
+
+### batch_analysis.py
+
+Compound library processing with real drug molecules:
+
+- **Library loading**: Parse multi-molecule SDF with summary table
+- **Streaming iteration**: Memory-efficient processing with `iter_sdf_file()`
+- **MW filtering**: Filter by molecular weight range, write subsets
+- **Descriptor sorting**: Rank molecules by MW and heavy atom count
+- **Element composition**: Compare C/H/O/N/S counts across molecules
+- **Bond profiles**: Compare single/double/aromatic bond distributions
+- **Lipinski analysis**: Apply Rule of Five criteria using SDF properties
+- **Finding extremes**: Identify molecules with most atoms, highest MW, most rings
+
+### geometry_analysis.py
+
+3D geometry operations (requires `--features geometry`):
+
+- **Distance matrix**: Pairwise distances, closest/farthest atom pairs
+- **Bond length analysis**: Extract actual bond lengths by bond type
+- **RMSD comparison**: Compare identical, translated, and perturbed molecules
+- **Rotation**: Axis-angle rotation with distance preservation verification
+- **Combined transforms**: Rotation matrix + translation
+- **NumPy analysis**: Bounding box, spatial extent, radius of gyration
+- **Conformer comparison**: Perturb coordinates, center, compare RMSD
+
+### Example Data
+
+The `data/` directory contains real drug molecules downloaded from PubChem:
+
+- `ibuprofen.sdf` — NSAID (CID 3672, 33 atoms)
+- `dopamine.sdf` — Neurotransmitter (CID 681, 22 atoms)
+- `cholesterol.sdf` — Steroid (CID 5997, 74 atoms)
+- `drug_library.sdf` — Combined multi-molecule file (6 drugs)
 
 ## Quick Reference
 
