@@ -28,10 +28,16 @@
 //! assert!((mw - 18.015).abs() < 0.01);
 //! ```
 
+pub mod aromaticity;
 pub mod bond_inference;
+pub mod conjugation;
 pub mod elements;
+pub mod gasteiger;
+pub mod hybridization;
 pub mod molecular;
+pub mod rings;
 pub mod topological;
+pub mod valence;
 
 // Re-export bond inference functions
 pub use bond_inference::{BondInferenceConfig, infer_bonds, infer_bonds_with_config};
@@ -44,3 +50,14 @@ pub use molecular::{bond_type_counts, exact_mass, heavy_atom_count, molecular_we
 
 // Re-export topological descriptor functions
 pub use topological::{ring_atoms, ring_bonds, ring_count, rotatable_bond_count};
+
+// Re-export new descriptor modules
+pub use aromaticity::{all_aromatic_atoms, all_aromatic_bonds, is_aromatic_atom, is_aromatic_bond};
+pub use conjugation::{all_conjugated_bonds, is_conjugated_bond};
+pub use gasteiger::{gasteiger_charges, gasteiger_charges_with_params};
+pub use hybridization::{Hybridization, all_hybridizations, atom_hybridization};
+pub use rings::{Ring, is_in_ring_of_size, ring_sizes, smallest_ring_size, sssr};
+pub use valence::{
+    all_atom_degrees, all_implicit_hydrogen_counts, all_total_hydrogen_counts, atom_degree,
+    bond_order_sum, implicit_hydrogen_count, total_hydrogen_count,
+};

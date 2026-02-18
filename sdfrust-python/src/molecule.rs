@@ -685,6 +685,459 @@ impl PyMolecule {
             .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))
     }
 
+    // ============================================================
+    // Chemical Perception & ML Features
+    // ============================================================
+
+    /// Compute the Smallest Set of Smallest Rings (SSSR).
+    ///
+    /// Returns a list of rings, where each ring is a list of atom indices.
+    ///
+    /// Returns:
+    ///     List of lists of atom indices, one per ring.
+    ///
+    /// Example:
+    ///     >>> mol = sdfrust.parse_sdf_file("benzene.sdf")
+    ///     >>> rings = mol.sssr()
+    ///     >>> print(len(rings))  # 1
+    pub fn sssr(&self) -> Vec<Vec<usize>> {
+        sdfrust::descriptors::sssr(&self.inner)
+            .into_iter()
+            .map(|r| r.atoms)
+            .collect()
+    }
+
+    /// Get ring sizes that an atom participates in.
+    ///
+    /// Args:
+    ///     atom_index: The atom index.
+    ///
+    /// Returns:
+    ///     List of ring sizes (e.g., [5, 6] if in both a 5- and 6-membered ring).
+    pub fn ring_sizes(&self, atom_index: usize) -> Vec<usize> {
+        sdfrust::descriptors::ring_sizes(&self.inner, atom_index)
+    }
+
+    /// Get the smallest ring size for an atom.
+    ///
+    /// Args:
+    ///     atom_index: The atom index.
+    ///
+    /// Returns:
+    ///     Smallest ring size, or None if the atom is not in any ring.
+    pub fn smallest_ring_size(&self, atom_index: usize) -> Option<usize> {
+        sdfrust::descriptors::smallest_ring_size(&self.inner, atom_index)
+    }
+
+    /// Get the hybridization of an atom.
+    ///
+    /// Args:
+    ///     atom_index: The atom index.
+    ///
+    /// Returns:
+    ///     Hybridization string: "S", "SP", "SP2", "SP3", "SP3D", "SP3D2", or "Other".
+    pub fn atom_hybridization(&self, atom_index: usize) -> String {
+        format!(
+            "{:?}",
+            sdfrust::descriptors::atom_hybridization(&self.inner, atom_index)
+        )
+    }
+
+    /// Get hybridizations for all atoms.
+    ///
+    /// Returns:
+    ///     List of hybridization strings.
+    pub fn all_hybridizations(&self) -> Vec<String> {
+        sdfrust::descriptors::all_hybridizations(&self.inner)
+            .into_iter()
+            .map(|h| format!("{:?}", h))
+            .collect()
+    }
+
+    /// Check if an atom is aromatic (Hückel 4n+2 rule or file annotation).
+    ///
+    /// Args:
+    ///     atom_index: The atom index.
+    ///
+    /// Returns:
+    ///     True if the atom is aromatic.
+    pub fn is_aromatic_atom(&self, atom_index: usize) -> bool {
+        sdfrust::descriptors::is_aromatic_atom(&self.inner, atom_index)
+    }
+
+    /// Check if a bond is aromatic.
+    ///
+    /// Args:
+    ///     bond_index: The bond index.
+    ///
+    /// Returns:
+    ///     True if the bond is aromatic.
+    pub fn is_aromatic_bond(&self, bond_index: usize) -> bool {
+        sdfrust::descriptors::is_aromatic_bond(&self.inner, bond_index)
+    }
+
+    /// Get aromaticity for all atoms.
+    ///
+    /// Returns:
+    ///     List of booleans, one per atom.
+    pub fn all_aromatic_atoms(&self) -> Vec<bool> {
+        sdfrust::descriptors::all_aromatic_atoms(&self.inner)
+    }
+
+    /// Get aromaticity for all bonds.
+    ///
+    /// Returns:
+    ///     List of booleans, one per bond.
+    pub fn all_aromatic_bonds(&self) -> Vec<bool> {
+        sdfrust::descriptors::all_aromatic_bonds(&self.inner)
+    }
+
+    /// Check if a bond is conjugated.
+    ///
+    /// Args:
+    ///     bond_index: The bond index.
+    ///
+    /// Returns:
+    ///     True if the bond is conjugated.
+    pub fn is_conjugated_bond(&self, bond_index: usize) -> bool {
+        sdfrust::descriptors::is_conjugated_bond(&self.inner, bond_index)
+    }
+
+    /// Get conjugation status for all bonds.
+    ///
+    /// Returns:
+    ///     List of booleans, one per bond.
+    pub fn all_conjugated_bonds(&self) -> Vec<bool> {
+        sdfrust::descriptors::all_conjugated_bonds(&self.inner)
+    }
+
+    /// Get the degree (number of bonds) for an atom.
+    ///
+    /// Args:
+    ///     atom_index: The atom index.
+    ///
+    /// Returns:
+    ///     Number of bonds connected to this atom.
+    pub fn atom_degree(&self, atom_index: usize) -> usize {
+        sdfrust::descriptors::atom_degree(&self.inner, atom_index)
+    }
+
+    /// Get the total hydrogen count for an atom (implicit + explicit).
+    ///
+    /// Args:
+    ///     atom_index: The atom index.
+    ///
+    /// Returns:
+    ///     Total number of hydrogens on this atom.
+    pub fn total_hydrogen_count(&self, atom_index: usize) -> u8 {
+        sdfrust::descriptors::total_hydrogen_count(&self.inner, atom_index)
+    }
+
+    /// Get implicit hydrogen count for an atom.
+    ///
+    /// Args:
+    ///     atom_index: The atom index.
+    ///
+    /// Returns:
+    ///     Number of implicit hydrogens.
+    pub fn implicit_hydrogen_count(&self, atom_index: usize) -> u8 {
+        sdfrust::descriptors::implicit_hydrogen_count(&self.inner, atom_index)
+    }
+
+    /// Compute Gasteiger partial charges for all atoms.
+    ///
+    /// Uses the PEOE (Partial Equalization of Orbital Electronegativity) algorithm
+    /// with 6 iterations and 0.5 damping factor.
+    ///
+    /// Returns:
+    ///     List of partial charges (float), one per atom.
+    ///
+    /// Example:
+    ///     >>> mol = sdfrust.parse_sdf_file("aspirin.sdf")
+    ///     >>> charges = mol.gasteiger_charges()
+    ///     >>> print(f"O charge: {charges[0]:.3f}")
+    pub fn gasteiger_charges(&self) -> Vec<f64> {
+        sdfrust::descriptors::gasteiger_charges(&self.inner)
+    }
+
+    /// Compute Gasteiger charges with custom parameters.
+    ///
+    /// Args:
+    ///     max_iter: Maximum number of iterations (default: 6).
+    ///     damping: Damping factor (default: 0.5).
+    ///
+    /// Returns:
+    ///     List of partial charges (float), one per atom.
+    #[pyo3(signature = (max_iter=6, damping=0.5))]
+    pub fn gasteiger_charges_with_params(&self, max_iter: usize, damping: f64) -> Vec<f64> {
+        sdfrust::descriptors::gasteiger_charges_with_params(&self.inner, max_iter, damping)
+    }
+
+    /// Compute OGB-compatible atom features.
+    ///
+    /// Returns a 2D list of shape [N, 9] where N is the number of atoms.
+    /// Features: atomic_number, chirality, degree, formal_charge+5,
+    /// num_hs, radical, hybridization, is_aromatic, is_in_ring.
+    ///
+    /// Returns:
+    ///     List of lists of integers (9 features per atom).
+    ///
+    /// Example:
+    ///     >>> feats = mol.ogb_atom_features()
+    ///     >>> print(feats[0])  # [6, 0, 3, 5, 0, 0, 2, 1, 1] for aromatic C
+    pub fn ogb_atom_features(&self) -> Vec<Vec<i32>> {
+        sdfrust::featurize::ogb::ogb_atom_features(&self.inner).features
+    }
+
+    /// Compute OGB-compatible bond features.
+    ///
+    /// Returns a 2D list of shape [E, 3] where E is the number of bonds.
+    /// Features: bond_type (0-3), stereo (0-3), is_conjugated (0/1).
+    ///
+    /// Returns:
+    ///     List of lists of integers (3 features per bond).
+    pub fn ogb_bond_features(&self) -> Vec<Vec<i32>> {
+        sdfrust::featurize::ogb::ogb_bond_features(&self.inner).features
+    }
+
+    /// Compute complete OGB graph features with directed edge index.
+    ///
+    /// Returns a dictionary with:
+    ///   - "atom_features": [N, 9] atom feature matrix
+    ///   - "bond_features": [2E, 3] directed bond feature matrix
+    ///   - "edge_src": source atoms for directed edges
+    ///   - "edge_dst": destination atoms for directed edges
+    ///
+    /// Returns:
+    ///     Dictionary of graph features matching PyTorch Geometric format.
+    pub fn ogb_graph_features(&self, py: Python<'_>) -> PyResult<PyObject> {
+        let graph = sdfrust::featurize::ogb::ogb_graph_features(&self.inner);
+        let dict = pyo3::types::PyDict::new(py);
+        dict.set_item("atom_features", &graph.atom_features.features)?;
+        dict.set_item("bond_features", &graph.bond_features.features)?;
+        dict.set_item("edge_src", &graph.edge_src)?;
+        dict.set_item("edge_dst", &graph.edge_dst)?;
+        dict.set_item("num_atoms", graph.atom_features.num_atoms)?;
+        dict.set_item("num_bonds", graph.bond_features.num_bonds)?;
+        Ok(dict.into())
+    }
+
+    /// Compute ECFP/Morgan fingerprint as a bit vector.
+    ///
+    /// Args:
+    ///     radius: Fingerprint radius (2 for ECFP4, 3 for ECFP6). Default: 2.
+    ///     n_bits: Length of the bit vector. Default: 2048.
+    ///
+    /// Returns:
+    ///     List of booleans representing the fingerprint bit vector.
+    ///
+    /// Example:
+    ///     >>> fp = mol.ecfp(radius=2, n_bits=2048)
+    ///     >>> print(sum(fp))  # Number of set bits
+    #[pyo3(signature = (radius=2, n_bits=2048))]
+    pub fn ecfp(&self, radius: usize, n_bits: usize) -> Vec<bool> {
+        sdfrust::fingerprints::ecfp::ecfp(&self.inner, radius, n_bits).bits
+    }
+
+    /// Compute ECFP/Morgan fingerprint as on-bit indices.
+    ///
+    /// Args:
+    ///     radius: Fingerprint radius. Default: 2.
+    ///     n_bits: Length of the bit vector. Default: 2048.
+    ///
+    /// Returns:
+    ///     List of indices where bits are set.
+    #[pyo3(signature = (radius=2, n_bits=2048))]
+    pub fn ecfp_on_bits(&self, radius: usize, n_bits: usize) -> Vec<usize> {
+        sdfrust::fingerprints::ecfp::ecfp(&self.inner, radius, n_bits).on_bits()
+    }
+
+    /// Compute Tanimoto similarity between two molecules using ECFP.
+    ///
+    /// Args:
+    ///     other: The other molecule.
+    ///     radius: Fingerprint radius. Default: 2.
+    ///     n_bits: Length of the bit vector. Default: 2048.
+    ///
+    /// Returns:
+    ///     Tanimoto similarity coefficient in [0, 1].
+    #[pyo3(signature = (other, radius=2, n_bits=2048))]
+    pub fn tanimoto_similarity(&self, other: &PyMolecule, radius: usize, n_bits: usize) -> f64 {
+        let fp1 = sdfrust::fingerprints::ecfp::ecfp(&self.inner, radius, n_bits);
+        let fp2 = sdfrust::fingerprints::ecfp::ecfp(&other.inner, radius, n_bits);
+        fp1.tanimoto(&fp2)
+    }
+
+    /// Compute ECFP count fingerprint (hash → count map).
+    ///
+    /// Args:
+    ///     radius: Fingerprint radius. Default: 2.
+    ///
+    /// Returns:
+    ///     Dictionary mapping feature hash (int) to count (int).
+    #[pyo3(signature = (radius=2))]
+    pub fn ecfp_counts(&self, radius: usize) -> HashMap<u32, u32> {
+        sdfrust::fingerprints::ecfp::ecfp_counts(&self.inner, radius).counts
+    }
+
+    // ============================================================
+    // NumPy ML features (when numpy feature is enabled)
+    // ============================================================
+
+    #[cfg(feature = "numpy")]
+    /// Get Gasteiger charges as a NumPy array.
+    ///
+    /// Returns:
+    ///     NumPy array of shape (N,) with partial charges.
+    pub fn get_gasteiger_charges_array<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> Bound<'py, numpy::PyArray1<f64>> {
+        let charges = sdfrust::descriptors::gasteiger_charges(&self.inner);
+        numpy::PyArray1::from_vec(py, charges)
+    }
+
+    #[cfg(feature = "numpy")]
+    /// Get OGB atom features as a NumPy array.
+    ///
+    /// Returns:
+    ///     NumPy array of shape (N, 9) with integer features.
+    pub fn get_ogb_atom_features_array<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> PyResult<Bound<'py, numpy::PyArray2<i32>>> {
+        let feats = sdfrust::featurize::ogb::ogb_atom_features(&self.inner);
+        numpy::PyArray2::from_vec2(py, &feats.features)
+            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))
+    }
+
+    #[cfg(feature = "numpy")]
+    /// Get OGB bond features as a NumPy array.
+    ///
+    /// Returns:
+    ///     NumPy array of shape (E, 3) with integer features.
+    pub fn get_ogb_bond_features_array<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> PyResult<Bound<'py, numpy::PyArray2<i32>>> {
+        let feats = sdfrust::featurize::ogb::ogb_bond_features(&self.inner);
+        numpy::PyArray2::from_vec2(py, &feats.features)
+            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))
+    }
+
+    #[cfg(feature = "numpy")]
+    /// Get ECFP fingerprint as a NumPy boolean array.
+    ///
+    /// Args:
+    ///     radius: Fingerprint radius. Default: 2.
+    ///     n_bits: Length of the bit vector. Default: 2048.
+    ///
+    /// Returns:
+    ///     NumPy boolean array of shape (n_bits,).
+    #[pyo3(signature = (radius=2, n_bits=2048))]
+    pub fn get_ecfp_array<'py>(
+        &self,
+        py: Python<'py>,
+        radius: usize,
+        n_bits: usize,
+    ) -> Bound<'py, numpy::PyArray1<bool>> {
+        let fp = sdfrust::fingerprints::ecfp::ecfp(&self.inner, radius, n_bits);
+        numpy::PyArray1::from_vec(py, fp.bits)
+    }
+
+    // ============================================================
+    // Geometry-based ML features (when geometry feature is enabled)
+    // ============================================================
+
+    #[cfg(feature = "geometry")]
+    /// Compute cutoff-based neighbor list for 3D GNNs.
+    ///
+    /// Returns a dictionary with:
+    ///   - "edge_src": source atom indices
+    ///   - "edge_dst": destination atom indices
+    ///   - "distances": pairwise distances
+    ///   - "num_edges": number of directed edges
+    ///
+    /// Args:
+    ///     cutoff: Distance cutoff in Angstroms.
+    ///
+    /// Returns:
+    ///     Dictionary with edge index and distances.
+    pub fn neighbor_list(&self, cutoff: f64, py: Python<'_>) -> PyResult<PyObject> {
+        let nl = sdfrust::geometry::neighbor_list(&self.inner, cutoff);
+        let dict = pyo3::types::PyDict::new(py);
+        dict.set_item("edge_src", &nl.edge_src)?;
+        dict.set_item("edge_dst", &nl.edge_dst)?;
+        dict.set_item("distances", &nl.distances)?;
+        dict.set_item("num_edges", nl.num_edges())?;
+        Ok(dict.into())
+    }
+
+    #[cfg(feature = "geometry")]
+    /// Compute a bond angle (in radians) for atoms i-j-k.
+    ///
+    /// Args:
+    ///     i: First atom index.
+    ///     j: Central atom index.
+    ///     k: Third atom index.
+    ///
+    /// Returns:
+    ///     Angle in radians, or None if undefined.
+    pub fn bond_angle(&self, i: usize, j: usize, k: usize) -> Option<f64> {
+        sdfrust::geometry::bond_angle(&self.inner, i, j, k)
+    }
+
+    #[cfg(feature = "geometry")]
+    /// Compute a dihedral angle (in radians) for atoms i-j-k-l.
+    ///
+    /// Args:
+    ///     i: First atom index.
+    ///     j: Second atom index.
+    ///     k: Third atom index.
+    ///     l: Fourth atom index.
+    ///
+    /// Returns:
+    ///     Dihedral angle in radians (-pi to pi), or None if undefined.
+    pub fn dihedral_angle(&self, i: usize, j: usize, k: usize, l: usize) -> Option<f64> {
+        sdfrust::geometry::dihedral_angle(&self.inner, i, j, k, l)
+    }
+
+    #[cfg(feature = "geometry")]
+    /// Compute all bond angles in the molecule.
+    ///
+    /// Returns a dictionary with:
+    ///   - "triplets": list of [i, j, k] triplets (j is central atom)
+    ///   - "angles": list of angles in radians
+    ///
+    /// Returns:
+    ///     Dictionary with triplet indices and angle values.
+    pub fn all_bond_angles(&self, py: Python<'_>) -> PyResult<PyObject> {
+        let result = sdfrust::geometry::all_bond_angles(&self.inner);
+        let dict = pyo3::types::PyDict::new(py);
+        let triplets: Vec<Vec<usize>> = result.triplets.iter().map(|t| t.to_vec()).collect();
+        dict.set_item("triplets", triplets)?;
+        dict.set_item("angles", &result.angles)?;
+        Ok(dict.into())
+    }
+
+    #[cfg(feature = "geometry")]
+    /// Compute all dihedral angles in the molecule.
+    ///
+    /// Returns a dictionary with:
+    ///   - "quadruplets": list of [i, j, k, l] quadruplets
+    ///   - "angles": list of dihedral angles in radians (-pi to pi)
+    ///
+    /// Returns:
+    ///     Dictionary with quadruplet indices and angle values.
+    pub fn all_dihedral_angles(&self, py: Python<'_>) -> PyResult<PyObject> {
+        let result = sdfrust::geometry::all_dihedral_angles(&self.inner);
+        let dict = pyo3::types::PyDict::new(py);
+        let quads: Vec<Vec<usize>> = result.quadruplets.iter().map(|q| q.to_vec()).collect();
+        dict.set_item("quadruplets", quads)?;
+        dict.set_item("angles", &result.angles)?;
+        Ok(dict.into())
+    }
+
     fn __repr__(&self) -> String {
         format!(
             "Molecule(name='{}', atoms={}, bonds={})",

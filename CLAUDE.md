@@ -38,6 +38,7 @@ src/
 ├── atom.rs                # Atom struct (index, element, x/y/z, charge)
 ├── bond.rs                # Bond, BondOrder, BondStereo
 ├── molecule.rs            # Molecule container + SdfFormat enum
+├── graph.rs               # AdjacencyList: pre-computed neighbor lookups, degree vectors
 ├── parser/
 │   ├── sdf.rs             # V2000 parser + auto-detection + unified parse_auto_*
 │   ├── sdf_v3000.rs       # V3000 parser
@@ -51,7 +52,20 @@ src/
 │   ├── elements.rs        # Periodic table data + covalent radii
 │   ├── molecular.rs       # MW, exact mass, heavy atom count
 │   ├── topological.rs     # Ring count, rotatable bonds
-│   └── bond_inference.rs  # Infer bonds from 3D coordinates
+│   ├── bond_inference.rs  # Infer bonds from 3D coordinates
+│   ├── valence.rs         # Atom degree, implicit/total hydrogen count
+│   ├── rings.rs           # SSSR ring perception (spanning-tree + GF(2))
+│   ├── hybridization.rs   # SP/SP2/SP3/SP3D/SP3D2 from bond topology
+│   ├── aromaticity.rs     # Hückel 4n+2 aromaticity perception
+│   ├── conjugation.rs     # Conjugated bond detection
+│   └── gasteiger.rs       # Gasteiger-Marsili partial charges (PEOE)
+├── geometry/              # Feature-gated: geometry = ["nalgebra"]
+│   ├── neighbor_list.rs   # Cutoff-based neighbor list for 3D GNNs
+│   └── angles.rs          # Bond angles + dihedral angles
+├── featurize/
+│   └── ogb.rs             # OGB-compatible GNN featurizer (9 atom + 3 bond features)
+├── fingerprints/
+│   └── ecfp.rs            # ECFP/Morgan fingerprints (Rogers & Hahn 2010)
 ├── sgroup.rs              # SGroup types (V3000)
 ├── stereogroup.rs         # Stereogroup types (V3000)
 └── collection.rs          # Collection types (V3000)
@@ -73,6 +87,21 @@ Each parser follows the same pattern: `Parser<R: BufRead>` for streaming + `Iter
 - `Atom`: fields `index`, `element`, `x`, `y`, `z`, `formal_charge`
 - `Bond`: fields `atom1`, `atom2`, `order` (BondOrder enum), `stereo`
 
+### ML Feature API
+
+- `AdjacencyList::from_molecule(mol)` — graph adjacency with O(1) lookups
+- `descriptors::sssr(mol)` — SSSR ring perception
+- `descriptors::atom_hybridization(mol, idx)` — SP/SP2/SP3 hybridization
+- `descriptors::is_aromatic_atom(mol, idx)` / `all_aromatic_atoms(mol)` — aromaticity
+- `descriptors::is_conjugated_bond(mol, idx)` / `all_conjugated_bonds(mol)` — conjugation
+- `descriptors::gasteiger_charges(mol)` — partial charges (PEOE)
+- `featurize::ogb::ogb_atom_features(mol)` — [N, 9] OGB atom features
+- `featurize::ogb::ogb_bond_features(mol)` — [E, 3] OGB bond features
+- `featurize::ogb::ogb_graph_features(mol)` — complete graph with directed edge index
+- `fingerprints::ecfp::ecfp(mol, radius, n_bits)` — ECFP/Morgan fingerprint
+- `geometry::neighbor_list(mol, cutoff)` — cutoff-based neighbor list (geometry feature)
+- `geometry::bond_angle(mol, i, j, k)` / `dihedral_angle(mol, i, j, k, l)` — angles (geometry feature)
+
 ## Development Workflows
 
 **Adding a feature**: Create module in `src/` → add to `lib.rs` exports → write tests in `tests/` → update ROADMAP.md
@@ -91,6 +120,7 @@ Example scripts in `sdfrust-python/examples/` with PubChem drug data in `example
 - `format_conversion.py` — Multi-format detection, XYZ parsing, SDF/MOL2 conversion, round-trips
 - `batch_analysis.py` — Drug library processing: filtering, sorting, Lipinski analysis
 - `geometry_analysis.py` — 3D geometry: distance matrices, RMSD, rotation, transforms (requires `--features geometry`)
+- `ml_features.py` — ML features: OGB featurization, ECFP fingerprints, Gasteiger charges, rings, aromaticity, NumPy arrays
 
 ## CI/CD
 
@@ -103,6 +133,15 @@ GitHub Actions: `.github/workflows/rust.yml`. Use `gh run list`, `gh run view <i
 - **MOL2**: Section headers `@<TRIPOS>`. SYBYL atom types like `C.ar` — element extracted before `.`. Bond type `ar` for aromatic.
 - **XYZ**: No bonds. Element can be symbol or atomic number. Case-normalized. Multi-molecule files are concatenated blocks.
 
+## Build & Test (ML features)
+
+```bash
+cargo test                                      # Run all 585+ tests
+cargo test --features geometry                   # Include geometry-gated tests
+cargo run --example ml_features                  # Run ML features demo
+cargo clippy --workspace --features geometry     # Lint everything
+```
+
 ## Roadmap
 
-Phase 9.9 (Bond Inference) complete. Next: Phase 10 (Shared Traits). See ROADMAP.md.
+Phase 11 (ML Features, Tiers 0-3) complete. Next: Phase 11.11 (CIP chirality), Phase 11.12 (batch pipeline). See ROADMAP.md.

@@ -611,20 +611,159 @@ print(mol.num_bonds)          # 2
 
 ---
 
-## Phase 11: Advanced Features
+## Phase 11: ML-Ready Chemical Perception & Featurization ✅ COMPLETE (Tiers 0-3)
 
-**Status:** Future
+**Status:** Tiers 0-3 complete; Tier 4 (CIP chirality, batch pipeline) planned
 
-### Potential Features
+**Motivation:** Make sdfrust the data preprocessing layer for molecular ML — handling fast I/O, feature computation, and tensor output so PyTorch/JAX models can consume data directly, bypassing SMILES-based pipelines.
+
+### Phase 11.0 — Graph Adjacency Infrastructure ✅
+
+**Module:** `src/graph.rs`
+
+- [x] `AdjacencyList` struct: pre-computed neighbor lookups, degree vectors, O(1) access
+- [x] `from_molecule()`, `neighbors()`, `neighbor_atoms()`, `degree()`, `heavy_degree()`
+- [x] Foundation for all subsequent phases
+
+### Phase 11.1 — Atom Degree & Implicit Hydrogen Count ✅
+
+**Module:** `src/descriptors/valence.rs`
+
+- [x] Default valence table: maps (element, charge) → typical valence (~20 entries)
+- [x] `atom_degree()`, `bond_order_sum()`
+- [x] `implicit_hydrogen_count()`, `total_hydrogen_count()`
+- [x] `all_atom_degrees()`, `all_implicit_hydrogen_counts()`, `all_total_hydrogen_counts()`
+- [x] **Unlocks 2 of 9 OGB atom features** (degree, num_hs)
+
+### Phase 11.2 — Neighbor List with Cutoff ✅
+
+**Module:** `src/geometry/neighbor_list.rs` (under `geometry` feature)
+
+- [x] `neighbor_list(mol, cutoff) → NeighborList` with edge_src, edge_dst, distances
+- [x] `neighbor_list_with_self_loops()` variant
+- [x] Directed pairs (both i→j and j→i) matching PyTorch Geometric format
+- [x] **Enables SchNet/DimeNet/PaiNN/GemNet workflows**
+
+### Phase 11.3 — SSSR Ring Perception ✅
+
+**Module:** `src/descriptors/rings.rs`
+
+- [x] Smallest Set of Smallest Rings via spanning-tree + BFS + GF(2) independence
+- [x] `sssr(mol) → Vec<Ring>` with actual ring atom and bond indices
+- [x] `ring_sizes()`, `smallest_ring_size()`, `is_in_ring_of_size()`
+- [x] Prerequisite for aromaticity perception
+
+### Phase 11.4 — Bond Angles & Dihedral Angles ✅
+
+**Module:** `src/geometry/angles.rs` (under `geometry` feature)
+
+- [x] `bond_angle(mol, i, j, k) → f64` (radians)
+- [x] `dihedral_angle(mol, i, j, k, l) → f64` (radians)
+- [x] `all_bond_angles()` / `all_dihedral_angles()` — enumerated from bonded paths
+- [x] Returns `(triplet_indices, angles)` / `(quadruplet_indices, angles)` for DimeNet/GemNet
+
+### Phase 11.5 — Hybridization ✅
+
+**Module:** `src/descriptors/hybridization.rs`
+
+- [x] `enum Hybridization { S, SP, SP2, SP3, SP3D, SP3D2, Other }`
+- [x] Inferred from bond order sum + neighbor count
+- [x] `to_ogb_index()` for direct OGB feature encoding
+- [x] **Unlocks 1 OGB feature** + prerequisite for conjugation/Gasteiger
+
+### Phase 11.6 — Aromaticity Perception ✅
+
+**Module:** `src/descriptors/aromaticity.rs`
+
+- [x] Two-stage: (1) trust `BondOrder::Aromatic` from file, (2) Hückel 4n+2 on SSSR rings
+- [x] Pi-electron counting for C, N, O, S, Se, P
+- [x] `is_aromatic_atom()`, `is_aromatic_bond()`, `all_aromatic_atoms()`, `all_aromatic_bonds()`
+- [x] **Unlocks 1 OGB feature** (is_aromatic)
+
+### Phase 11.7 — Conjugation Detection ✅
+
+**Module:** `src/descriptors/conjugation.rs`
+
+- [x] Aromatic bonds → conjugated
+- [x] Single bond between two SP2 atoms → conjugated
+- [x] Double/triple bond adjacent to unsaturation → conjugated
+- [x] **Completes all 3 OGB bond features** (bond_type, stereo, is_conjugated)
+
+### Phase 11.8 — OGB-Compatible GNN Featurizer ✅
+
+**Module:** `src/featurize/ogb.rs`
+
+- [x] `ogb_atom_features(mol) → [N, 9]` integer matrix
+- [x] `ogb_bond_features(mol) → [E, 3]` integer matrix
+- [x] `ogb_graph_features(mol) → OgbGraphFeatures` with directed edge index
+- [x] Matches OGB `AtomEncoder`/`BondEncoder` conventions exactly
+- [x] **Replaces entire RDKit preprocessing pipeline**
+
+### Phase 11.9 — ECFP/Morgan Fingerprints ✅
+
+**Module:** `src/fingerprints/ecfp.rs`
+
+- [x] Rogers & Hahn (2010) algorithm: initial atom invariant → neighbor collection → fold to bits
+- [x] `ecfp(mol, radius, n_bits) → EcfpFingerprint` with bit vector
+- [x] `ecfp_counts(mol, radius) → EcfpCountFingerprint` with hash → count map
+- [x] Tanimoto similarity, density, on_bits
+- [x] **First pure-Rust ECFP implementation**
+
+### Phase 11.10 — Gasteiger Partial Charges ✅
+
+**Module:** `src/descriptors/gasteiger.rs`
+
+- [x] PEOE algorithm: iterative charge equalization
+- [x] Electronegativity parameters for ~15 atom types × hybridization states
+- [x] `gasteiger_charges(mol)` (6 iterations, 0.5 damping)
+- [x] `gasteiger_charges_with_params(mol, max_iter, damping)`
+
+### Phase 11 Python Bindings ✅
+
+- [x] All features exposed on `Molecule` class
+- [x] NumPy array outputs: `get_ogb_atom_features_array()`, `get_ogb_bond_features_array()`, `get_gasteiger_charges_array()`, `get_ecfp_array()`
+- [x] OGB graph features as dict matching PyTorch Geometric format
+- [x] ECFP fingerprints with Tanimoto similarity
+- [x] Neighbor list and angle computation (geometry feature)
+
+### Phase 11 Test Coverage
+
+- 585+ tests passing (unit + integration + doc-tests)
+- Benzene, pyrrole, furan, cyclopentane, naphthalene, cubane tested for SSSR
+- Kekulized and aromatic form aromaticity detection
+- Butadiene conjugation chain
+- Water H-O-H angle validation
+- Zero clippy warnings
+
+### Module Structure
+```
+src/
+├── graph.rs                    # AdjacencyList, degree (Phase 11.0)
+├── descriptors/
+│   ├── valence.rs              # Default valence, implicit H (Phase 11.1)
+│   ├── rings.rs                # SSSR ring perception (Phase 11.3)
+│   ├── hybridization.rs        # SP/SP2/SP3 (Phase 11.5)
+│   ├── aromaticity.rs          # Hückel-rule perception (Phase 11.6)
+│   ├── conjugation.rs          # Conjugated bond detection (Phase 11.7)
+│   └── gasteiger.rs            # Partial charges (Phase 11.10)
+├── geometry/
+│   ├── neighbor_list.rs        # Cutoff-based neighbor list (Phase 11.2)
+│   └── angles.rs               # Bond + dihedral angles (Phase 11.4)
+├── featurize/
+│   ├── mod.rs
+│   └── ogb.rs                  # OGB feature vectors (Phase 11.8)
+└── fingerprints/
+    ├── mod.rs
+    └── ecfp.rs                 # Morgan/ECFP (Phase 11.9)
+```
+
+### Remaining Phases (Future)
+
+- [ ] Phase 11.11: CIP chirality (R/S labels from CIP priority rules)
+- [ ] Phase 11.12: Parallel batch pipeline (optional `rayon` dependency)
 - [ ] Bond order assignment from valence constraints (Phase B of bond inference)
 - [ ] SMILES parsing/generation
-- [ ] InChI generation
 - [ ] Substructure search
-- [ ] Fingerprint generation (ECFP, MACCS)
-- [ ] 2D coordinate generation
-- [ ] Stereochemistry perception
-- [ ] Aromaticity perception
-- [ ] Hydrogen addition/removal
 
 ---
 
@@ -662,8 +801,9 @@ Following pdbrust conventions:
 | 0.2.0   | 3-7    | Testing, MOL2, benchmarks, SDF V3000 ✅ |
 | 0.3.0   | 8      | Basic descriptors ✅ |
 | 0.4.0   | 9      | Python bindings ✅ |
-| 0.5.0   | 9.7-9.8 | XYZ parser, gzip support ✅ |
-| 1.0.0   | 10-11  | Stable API, advanced features |
+| 0.5.0   | 9.7-9.9 | XYZ parser, gzip support, bond inference ✅ |
+| 0.6.0   | 11.0-11.10 | ML features: graph adjacency, valence, SSSR, aromaticity, hybridization, conjugation, OGB featurizer, ECFP, Gasteiger, neighbor list, angles ✅ |
+| 1.0.0   | 10-11.12 | Stable API, CIP chirality, batch pipeline |
 
 ---
 

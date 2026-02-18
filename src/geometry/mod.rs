@@ -24,11 +24,17 @@
 //! mol.rotate([0.0, 0.0, 1.0], PI / 2.0);
 //! ```
 
+pub mod angles;
 mod distance;
+pub mod neighbor_list;
 mod rmsd;
 mod transform;
 
+pub use angles::{
+    AngleResult, DihedralResult, all_bond_angles, all_dihedral_angles, bond_angle, dihedral_angle,
+};
 pub use distance::distance_matrix;
+pub use neighbor_list::{NeighborList, neighbor_list, neighbor_list_with_self_loops};
 pub use rmsd::{rmsd_from_coords, rmsd_to};
 pub use transform::{apply_rotation_matrix, apply_transform, rotate};
 

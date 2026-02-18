@@ -413,8 +413,11 @@ pub mod bond;
 pub mod collection;
 pub mod descriptors;
 pub mod error;
+pub mod featurize;
+pub mod fingerprints;
 #[cfg(feature = "geometry")]
 pub mod geometry;
+pub mod graph;
 pub mod molecule;
 pub mod parser;
 pub mod sgroup;
@@ -480,6 +483,15 @@ pub use writer::{
 
 // Re-export bond inference functions
 pub use descriptors::{BondInferenceConfig, infer_bonds, infer_bonds_with_config};
+
+// Re-export graph module
+pub use graph::AdjacencyList;
+
+// Re-export ML featurization
+pub use featurize::ogb::{OgbAtomFeatures, OgbBondFeatures, OgbGraphFeatures};
+
+// Re-export fingerprints
+pub use fingerprints::ecfp::EcfpFingerprint;
 
 // Re-export descriptors module (access via sdfrust::descriptors::*)
 // For direct access: use sdfrust::descriptors::{molecular_weight, exact_mass, ...}
