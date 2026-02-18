@@ -463,6 +463,35 @@ impl PyMolecule {
     // Format Detection
     // ============================================================
 
+    // ============================================================
+    // Bond Inference
+    // ============================================================
+
+    /// Infer single bonds from 3D coordinates and covalent radii.
+    ///
+    /// Two atoms are bonded if their distance is within the sum of their
+    /// covalent radii plus a tolerance. All inferred bonds are single bonds.
+    /// Existing bonds are cleared before inference.
+    ///
+    /// This is useful for XYZ files which contain no bond information.
+    ///
+    /// Args:
+    ///     tolerance: Optional tolerance in Angstroms (default: 0.45).
+    ///
+    /// Raises:
+    ///     ValueError: If any atom has an unknown element.
+    ///
+    /// Example:
+    ///     >>> mol = sdfrust.parse_xyz_file("water.xyz")
+    ///     >>> mol.infer_bonds()
+    ///     >>> print(mol.num_bonds)  # 2
+    #[pyo3(signature = (tolerance=None))]
+    pub fn infer_bonds(&mut self, tolerance: Option<f64>) -> PyResult<()> {
+        self.inner
+            .infer_bonds(tolerance)
+            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))
+    }
+
     /// Returns True if this molecule requires V3000 format.
     ///
     /// Returns True if:

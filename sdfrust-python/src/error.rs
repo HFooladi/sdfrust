@@ -59,5 +59,8 @@ pub fn convert_error(err: SdfError) -> PyErr {
         SdfError::GzipNotEnabled => {
             PyValueError::new_err("Gzip file detected but gzip feature not enabled. Rebuild with: maturin develop --features gzip")
         }
+        SdfError::BondInferenceError { element, index } => {
+            PyValueError::new_err(format!("Bond inference: unknown element '{}' at atom index {}", element, index))
+        }
     }
 }

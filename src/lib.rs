@@ -478,5 +478,8 @@ pub use writer::{
     write_mol2, write_mol2_file, write_mol2_file_multi, write_mol2_multi, write_mol2_string,
 };
 
+// Re-export bond inference functions
+pub use descriptors::{BondInferenceConfig, infer_bonds, infer_bonds_with_config};
+
 // Re-export descriptors module (access via sdfrust::descriptors::*)
 // For direct access: use sdfrust::descriptors::{molecular_weight, exact_mass, ...}

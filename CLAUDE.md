@@ -34,7 +34,7 @@ PDBBIND_2024_DIR=/path/to/PDBbind_2024 cargo test --release pdbbind_benchmark --
 ```
 src/
 ├── lib.rs                 # Public API re-exports
-├── error.rs               # SdfError enum (17 variants)
+├── error.rs               # SdfError enum (18 variants)
 ├── atom.rs                # Atom struct (index, element, x/y/z, charge)
 ├── bond.rs                # Bond, BondOrder, BondStereo
 ├── molecule.rs            # Molecule container + SdfFormat enum
@@ -48,9 +48,10 @@ src/
 │   ├── sdf_v3000.rs       # V3000 writer + auto-format selection
 │   └── mol2.rs            # MOL2 writer
 ├── descriptors/
-│   ├── elements.rs        # Periodic table data
+│   ├── elements.rs        # Periodic table data + covalent radii
 │   ├── molecular.rs       # MW, exact mass, heavy atom count
-│   └── topological.rs     # Ring count, rotatable bonds
+│   ├── topological.rs     # Ring count, rotatable bonds
+│   └── bond_inference.rs  # Infer bonds from 3D coordinates
 ├── sgroup.rs              # SGroup types (V3000)
 ├── stereogroup.rs         # Stereogroup types (V3000)
 └── collection.rs          # Collection types (V3000)
@@ -67,7 +68,8 @@ Each parser follows the same pattern: `Parser<R: BufRead>` for streaming + `Iter
 - `iter_sdf_file(path)` — streaming iterator (memory-efficient)
 - `parse_auto_file(path)` — auto-detect format (SDF/MOL2/XYZ)
 - `write_sdf_file(mol, path)` / `write_sdf_auto_file(mol, path)` — V2000 or auto V2000/V3000
-- `Molecule`: `atom_count()`, `bond_count()`, `formula()`, `centroid()`, `neighbors(idx)`, `element_counts()`, `atoms_by_element(elem)`, `get_property(key)`, `set_property(key, val)`
+- `infer_bonds(mol, tolerance)` / `infer_bonds_with_config(mol, config)` — infer single bonds from 3D coordinates
+- `Molecule`: `atom_count()`, `bond_count()`, `formula()`, `centroid()`, `neighbors(idx)`, `element_counts()`, `atoms_by_element(elem)`, `get_property(key)`, `set_property(key, val)`, `infer_bonds(tolerance)`
 - `Atom`: fields `index`, `element`, `x`, `y`, `z`, `formal_charge`
 - `Bond`: fields `atom1`, `atom2`, `order` (BondOrder enum), `stereo`
 
@@ -103,4 +105,4 @@ GitHub Actions: `.github/workflows/rust.yml`. Use `gh run list`, `gh run view <i
 
 ## Roadmap
 
-Phase 9.7 (XYZ Parser) complete. Next: Phase 10 (Shared Traits). See ROADMAP.md.
+Phase 9.9 (Bond Inference) complete. Next: Phase 10 (Shared Traits). See ROADMAP.md.

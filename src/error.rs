@@ -53,6 +53,9 @@ pub enum SdfError {
 
     #[error("Gzip file detected but gzip feature not enabled. Enable with: --features gzip")]
     GzipNotEnabled,
+
+    #[error("Bond inference: unknown element '{element}' at atom index {index}")]
+    BondInferenceError { element: String, index: usize },
 }
 
 /// Result type alias for SDF operations.

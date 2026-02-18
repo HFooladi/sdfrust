@@ -280,6 +280,65 @@ pub fn monoisotopic_mass(symbol: &str) -> Option<f64> {
     get_element(symbol).map(|e| e.monoisotopic_mass)
 }
 
+/// Covalent radius in Angstroms.
+///
+/// Source: Cordero et al. (2008), Dalton Trans., 2832-2838.
+/// Returns `None` if the element is not found.
+///
+/// # Example
+///
+/// ```rust
+/// use sdfrust::descriptors::covalent_radius;
+///
+/// let r = covalent_radius("C").unwrap();
+/// assert!((r - 0.77).abs() < 0.01);
+/// ```
+pub fn covalent_radius(symbol: &str) -> Option<f64> {
+    let normalized = normalize_symbol(symbol);
+    COVALENT_RADII
+        .iter()
+        .find(|(s, _)| *s == normalized)
+        .map(|(_, r)| *r)
+}
+
+/// Covalent radii in Angstroms (Cordero et al. 2008).
+static COVALENT_RADII: &[(&str, f64)] = &[
+    ("H", 0.31),
+    ("He", 0.28),
+    ("Li", 1.28),
+    ("Be", 0.96),
+    ("B", 0.84),
+    ("C", 0.77),
+    ("N", 0.71),
+    ("O", 0.66),
+    ("F", 0.57),
+    ("Ne", 0.58),
+    ("Na", 1.66),
+    ("Mg", 1.41),
+    ("Al", 1.21),
+    ("Si", 1.11),
+    ("P", 1.07),
+    ("S", 1.05),
+    ("Cl", 1.02),
+    ("Ar", 1.06),
+    ("K", 2.03),
+    ("Ca", 1.76),
+    ("Mn", 1.39),
+    ("Fe", 1.32),
+    ("Co", 1.26),
+    ("Ni", 1.24),
+    ("Cu", 1.32),
+    ("Zn", 1.22),
+    ("As", 1.19),
+    ("Se", 1.20),
+    ("Br", 1.20),
+    ("I", 1.39),
+    ("Pt", 1.36),
+    ("Au", 1.36),
+    ("D", 0.31),
+    ("T", 0.31),
+];
+
 /// Normalize element symbol (capitalize first letter, lowercase rest).
 fn normalize_symbol(symbol: &str) -> String {
     let symbol = symbol.trim();
@@ -370,5 +429,30 @@ mod tests {
                 symbol
             );
         }
+    }
+
+    #[test]
+    fn test_covalent_radius_carbon() {
+        let r = covalent_radius("C").unwrap();
+        assert!((r - 0.77).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_covalent_radius_hydrogen() {
+        let r = covalent_radius("H").unwrap();
+        assert!((r - 0.31).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_covalent_radius_case_insensitive() {
+        assert!(covalent_radius("c").is_some());
+        assert!(covalent_radius("CL").is_some());
+        assert!(covalent_radius("br").is_some());
+    }
+
+    #[test]
+    fn test_covalent_radius_unknown() {
+        assert!(covalent_radius("Xx").is_none());
+        assert!(covalent_radius("").is_none());
     }
 }

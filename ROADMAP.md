@@ -527,6 +527,75 @@ maturin develop --features gzip
 
 ---
 
+## Phase 9.9: Bond Inference from 3D Coordinates ✅ COMPLETE
+
+**Status:** Implemented and tested
+
+### Deliverables
+- [x] Covalent radii data table (Cordero et al. 2008) with `covalent_radius()` lookup
+- [x] Bond inference algorithm: distance ≤ sum of covalent radii + tolerance
+- [x] `infer_bonds()` simple API with optional tolerance
+- [x] `infer_bonds_with_config()` full config API (tolerance, clear_existing_bonds)
+- [x] `BondInferenceConfig` struct for fine-grained control
+- [x] `Molecule::infer_bonds()` convenience method
+- [x] Python bindings (`mol.infer_bonds()`)
+- [x] `BondInferenceError` variant for unknown elements
+- [ ] Phase B: Bond order assignment from valence constraints (future)
+
+### Module Structure
+```
+src/descriptors/
+└── bond_inference.rs    # Core algorithm, config, Molecule impl
+src/descriptors/
+└── elements.rs          # Added covalent_radius() + static table
+```
+
+### API
+```rust
+use sdfrust::{parse_xyz_file, infer_bonds, infer_bonds_with_config, BondInferenceConfig};
+
+// Simple API
+let mut mol = parse_xyz_file("water.xyz")?;
+infer_bonds(&mut mol, None)?;           // default tolerance (0.45 A)
+infer_bonds(&mut mol, Some(0.3))?;      // custom tolerance
+
+// Convenience method
+mol.infer_bonds(None)?;
+
+// Full config
+let config = BondInferenceConfig {
+    tolerance: 0.3,
+    clear_existing_bonds: false,
+    ..Default::default()
+};
+infer_bonds_with_config(&mut mol, &config)?;
+```
+
+### Python API
+```python
+import sdfrust
+
+mol = sdfrust.parse_xyz_file("water.xyz")
+mol.infer_bonds()             # default tolerance
+mol.infer_bonds(tolerance=0.3)  # custom tolerance
+print(mol.num_bonds)          # 2
+```
+
+### Test Coverage
+- 8 unit tests in `bond_inference.rs`
+- 15 integration tests in `tests/bond_inference_tests.rs`
+- Molecules tested: water, methane, H2, ethanol, CO2, benzene
+- Edge cases: empty, single atom, unknown element, overlapping atoms, distant atoms
+- Tolerance effects, existing bond clearing
+
+### Notes
+- All inferred bonds are single bonds (Phase A only)
+- Phase B (bond order assignment using valence constraints) deferred to Phase 11
+- Default tolerance of 0.45 A matches xyz2mol and Open Babel
+- Minimum distance threshold (0.01 A) prevents bonding overlapping atoms
+
+---
+
 ## Phase 10: Shared Traits (mol-core)
 
 **Status:** Planned
@@ -547,6 +616,7 @@ maturin develop --features gzip
 **Status:** Future
 
 ### Potential Features
+- [ ] Bond order assignment from valence constraints (Phase B of bond inference)
 - [ ] SMILES parsing/generation
 - [ ] InChI generation
 - [ ] Substructure search

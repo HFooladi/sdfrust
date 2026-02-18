@@ -24,6 +24,7 @@ fn categorize_error(err: &SdfError) -> &'static str {
         SdfError::AtomIdNotFound { .. } => "AtomIdNotFound",
         SdfError::UnsupportedV3000Feature(_) => "UnsupportedV3000Feature",
         SdfError::GzipNotEnabled => "GzipNotEnabled",
+        SdfError::BondInferenceError { .. } => "BondInferenceError",
     }
 }
 
