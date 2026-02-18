@@ -372,9 +372,9 @@ mod tests {
         assert!(charges[0] < 0.0, "C should be slightly negative in methane");
         // All H should have same charge
         let h_charge = charges[1];
-        for i in 2..5 {
+        for charge in charges.iter().take(5).skip(2) {
             assert!(
-                (charges[i] - h_charge).abs() < 1e-10,
+                (charge - h_charge).abs() < 1e-10,
                 "All H should have same charge"
             );
         }

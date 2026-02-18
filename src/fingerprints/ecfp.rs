@@ -322,7 +322,7 @@ mod tests {
         let fp1 = ecfp(&mol1, 2, 2048);
         let fp2 = ecfp(&mol2, 2, 2048);
         let sim = fp1.tanimoto(&fp2);
-        assert!(sim >= 0.0 && sim <= 1.0);
+        assert!((0.0..=1.0).contains(&sim));
         // Different molecules should have < 1.0 similarity
         assert!(sim < 1.0);
     }
