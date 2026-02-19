@@ -5,15 +5,17 @@ Pure-Rust library for parsing/writing SDF (V2000/V3000), MOL2, and XYZ chemical 
 ## Build & Test
 
 ```bash
-cargo build                    # Build
-cargo test                     # Run all tests (260+ Rust + doc-tests)
-cargo clippy                   # Lint
-cargo build --workspace        # Include Python bindings crate
+cargo build                                     # Build
+cargo test                                       # Run all ~530 Rust tests (unit + integration + doc-tests)
+cargo test --features geometry                   # Include geometry-gated tests
+cargo clippy --workspace --features geometry     # Lint everything
+cargo fmt --check                                # Check formatting
+cargo build --workspace                          # Include Python bindings crate
 
 # Python bindings
 cd sdfrust-python && source .venv/bin/activate
 maturin develop --features numpy
-pytest tests/ -v               # 41 Python tests
+pytest tests/ -v                                 # ~346 Python tests
 
 # PDBbind benchmark (~27k files, requires dataset)
 PDBBIND_2024_DIR=/path/to/PDBbind_2024 cargo test --release pdbbind_benchmark -- --ignored --nocapture
@@ -58,6 +60,7 @@ src/
 │   ├── hybridization.rs   # SP/SP2/SP3/SP3D/SP3D2 from bond topology
 │   ├── aromaticity.rs     # Hückel 4n+2 aromaticity perception
 │   ├── conjugation.rs     # Conjugated bond detection
+│   ├── chirality.rs       # CIP R/S chirality perception
 │   └── gasteiger.rs       # Gasteiger-Marsili partial charges (PEOE)
 ├── geometry/              # Feature-gated: geometry = ["nalgebra"]
 │   ├── neighbor_list.rs   # Cutoff-based neighbor list for 3D GNNs
@@ -95,7 +98,8 @@ Each parser follows the same pattern: `Parser<R: BufRead>` for streaming + `Iter
 - `descriptors::is_aromatic_atom(mol, idx)` / `all_aromatic_atoms(mol)` — aromaticity
 - `descriptors::is_conjugated_bond(mol, idx)` / `all_conjugated_bonds(mol)` — conjugation
 - `descriptors::gasteiger_charges(mol)` — partial charges (PEOE)
-- `featurize::ogb::ogb_atom_features(mol)` — [N, 9] OGB atom features
+- `descriptors::atom_chirality(mol, idx)` / `all_chiralities(mol)` — CIP R/S chirality
+- `featurize::ogb::ogb_atom_features(mol)` — [N, 9] OGB atom features (all 9 match RDKit)
 - `featurize::ogb::ogb_bond_features(mol)` — [E, 3] OGB bond features
 - `featurize::ogb::ogb_graph_features(mol)` — complete graph with directed edge index
 - `fingerprints::ecfp::ecfp(mol, radius, n_bits)` — ECFP/Morgan fingerprint
@@ -110,7 +114,9 @@ Each parser follows the same pattern: `Parser<R: BufRead>` for streaming + `Iter
 
 ## Test Data
 
-Test files in `tests/test_data/`: `aspirin.sdf`, `caffeine_pubchem.sdf`, `glucose.sdf`, `galactose.sdf`, `acetaminophen.sdf`, `methionine.sdf`, `methane.mol2`, `benzene.mol2`, `water.xyz`, `multi.xyz`
+Test files in `tests/test_data/`: `aspirin.sdf`, `caffeine_pubchem.sdf`, `glucose.sdf`, `galactose.sdf`, `acetaminophen.sdf`, `methionine.sdf`, `v3000_benzene.sdf`, `v3000_charged.sdf`, `v3000_methane.sdf`, `v3000_stereo.sdf`, `methane.mol2`, `benzene.mol2`, `water.xyz`, `multi.xyz`
+
+Additional test molecules in `sdfrust-python/examples/data/`: `ibuprofen.sdf`, `dopamine.sdf`, `cholesterol.sdf`, `drug_library.sdf` (6 molecules)
 
 ## Python Examples
 
@@ -126,6 +132,11 @@ Example scripts in `sdfrust-python/examples/` with PubChem drug data in `example
 
 GitHub Actions: `.github/workflows/rust.yml`. Use `gh run list`, `gh run view <id>`, `gh pr list`.
 
+## Gotchas
+
+- **Python venv + Conda**: If `maturin develop` fails with linker errors, run `unset CONDA_PREFIX` before building
+- **SDF wedge bonds**: Stereo field on single bonds encodes chirality (Up/Down), not E/Z — only encode bond stereo on double bonds
+
 ## Format Gotchas
 
 - **SDF V2000**: Fixed-width columns. Coordinates at positions 0-9, 10-19, 20-29. Element at 31-33. Bond atoms at 0-2, 3-5 (1-based!). Charge codes are inverted: 1=+3, 2=+2, 3=+1, 5=-1, 6=-2, 7=-3.
@@ -133,15 +144,6 @@ GitHub Actions: `.github/workflows/rust.yml`. Use `gh run list`, `gh run view <i
 - **MOL2**: Section headers `@<TRIPOS>`. SYBYL atom types like `C.ar` — element extracted before `.`. Bond type `ar` for aromatic.
 - **XYZ**: No bonds. Element can be symbol or atomic number. Case-normalized. Multi-molecule files are concatenated blocks.
 
-## Build & Test (ML features)
-
-```bash
-cargo test                                      # Run all 585+ tests
-cargo test --features geometry                   # Include geometry-gated tests
-cargo run --example ml_features                  # Run ML features demo
-cargo clippy --workspace --features geometry     # Lint everything
-```
-
 ## Roadmap
 
-Phase 11 (ML Features, Tiers 0-3) complete. Next: Phase 11.11 (CIP chirality), Phase 11.12 (batch pipeline). See ROADMAP.md.
+Phase 11 (ML Features, Tiers 0-4) complete including CIP chirality. Next: Phase 11.12 (batch pipeline). See ROADMAP.md.
