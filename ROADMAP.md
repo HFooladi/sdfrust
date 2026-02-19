@@ -849,9 +849,8 @@ Following pdbrust conventions:
 | 0.2.0   | 3-7    | Testing, MOL2, benchmarks, SDF V3000 ✅ |
 | 0.3.0   | 8      | Basic descriptors ✅ |
 | 0.4.0   | 9      | Python bindings ✅ |
-| 0.5.0   | 9.7-9.9 | XYZ parser, gzip support, bond inference ✅ |
-| 0.6.0   | 11.0-11.10 | ML features: graph adjacency, valence, SSSR, aromaticity, hybridization, conjugation, OGB featurizer, ECFP, Gasteiger, neighbor list, angles ✅ |
-| 0.7.0   | 11.11 | CIP chirality perception — all 9/9 OGB atom features match RDKit ✅ |
+| 0.5.0   | 9.7-9.8 | XYZ parser, gzip support ✅ |
+| 0.6.0   | 9.9, 11.0-11.11 | Bond inference, ML features, CIP chirality — all 9/9 OGB features match RDKit ✅ |
 | 1.0.0   | 10-11.12 | Stable API, batch pipeline |
 
 ---

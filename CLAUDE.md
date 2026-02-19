@@ -146,4 +146,4 @@ GitHub Actions: `.github/workflows/rust.yml`. Use `gh run list`, `gh run view <i
 
 ## Roadmap
 
-Phase 11 (ML Features, Tiers 0-4) complete including CIP chirality. Next: Phase 11.12 (batch pipeline). See ROADMAP.md.
+v0.6.0 released: Phase 11 (ML Features, Tiers 0-4) complete including CIP chirality and bond inference. Next: Phase 11.12 (batch pipeline). See ROADMAP.md.

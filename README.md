@@ -30,7 +30,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-sdfrust = "0.5"
+sdfrust = "0.6"
 ```
 
 ### Python

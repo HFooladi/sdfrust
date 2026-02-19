@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-02-19
+
 ### Added
 
 - Graph adjacency infrastructure (`AdjacencyList`) with O(1) neighbor lookups and degree computation
@@ -18,11 +20,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - OGB-compatible GNN featurizer: `ogb_atom_features()` [N, 9], `ogb_bond_features()` [E, 3], `ogb_graph_features()` with directed edge index
 - ECFP/Morgan fingerprints: `ecfp()` bit vector, `ecfp_counts()` hash map, Tanimoto similarity — first pure-Rust implementation
 - Gasteiger-Marsili partial charges: PEOE iterative algorithm with ~15 atom type parameters
+- CIP chirality perception: `atom_chirality()`, `all_chiralities()` with R/S determination from 3D signed volume
+- Bond inference from 3D coordinates: `infer_bonds()`, `infer_bonds_with_config()` using covalent radii
 - Cutoff-based neighbor list for 3D GNNs: `neighbor_list()` with directed edges and distances (geometry feature)
 - Bond angle and dihedral angle computation: `bond_angle()`, `dihedral_angle()`, `all_bond_angles()`, `all_dihedral_angles()` (geometry feature)
 - Python bindings for all new ML features with NumPy array outputs (`get_ogb_atom_features_array()`, `get_ecfp_array()`, `get_gasteiger_charges_array()`)
+- Python examples: format conversion, batch analysis, geometry operations, ML features
 - Rust example: `examples/ml_features.rs`
-- Python example: `sdfrust-python/examples/ml_features.py`
 
 ## [0.5.0] - 2026-02-17
 
@@ -71,7 +75,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Molecule methods: `formula()`, `centroid()`, `translate()`, `neighbors()`, `element_counts()`
 - Memory-efficient streaming iterator for large multi-molecule files
 
-[Unreleased]: https://github.com/HFooladi/sdfrust/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/HFooladi/sdfrust/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/HFooladi/sdfrust/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/HFooladi/sdfrust/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/HFooladi/sdfrust/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/HFooladi/sdfrust/compare/v0.2.0...v0.3.0
