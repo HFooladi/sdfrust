@@ -48,6 +48,7 @@
 
 use crate::bond::{BondOrder, BondStereo};
 use crate::descriptors::aromaticity::{all_aromatic_atoms, all_aromatic_bonds};
+use crate::descriptors::chirality::all_chiralities;
 use crate::descriptors::conjugation::all_conjugated_bonds;
 use crate::descriptors::elements::get_element;
 use crate::descriptors::hybridization::all_hybridizations;
@@ -112,6 +113,7 @@ pub fn ogb_atom_features(mol: &Molecule) -> OgbAtomFeatures {
     let hybridizations = all_hybridizations(mol);
     let aromatic_atoms = all_aromatic_atoms(mol);
     let in_ring = ring_atoms(mol);
+    let chiralities = all_chiralities(mol);
 
     let mut features = Vec::with_capacity(n);
 
@@ -124,14 +126,9 @@ pub fn ogb_atom_features(mol: &Molecule) -> OgbAtomFeatures {
             .map(|e| e.atomic_number as i32)
             .unwrap_or(0);
 
-        // Feature 1: Chirality tag
-        // 0=unspecified, 1=CW (odd), 2=CCW (even), 3=other
-        feat[1] = match atom.stereo_parity {
-            Some(1) => 1, // odd → CW
-            Some(2) => 2, // even → CCW
-            Some(3) => 3, // either
-            _ => 0,
-        };
+        // Feature 1: Chirality tag (CIP-based perception)
+        // 0=unspecified, 1=CW (R), 2=CCW (S), 3=other
+        feat[1] = chiralities[i].to_ogb_index() as i32;
 
         // Feature 2: Degree
         feat[2] = adj.degree(i) as i32;

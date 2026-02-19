@@ -811,6 +811,34 @@ impl PyMolecule {
         sdfrust::descriptors::all_conjugated_bonds(&self.inner)
     }
 
+    /// Get the chirality tag for an atom (CIP-based perception).
+    ///
+    /// Uses CIP priority rules and signed volume to determine R/S configuration.
+    /// Returns "Unspecified" for non-stereocenters, "CW" for R, "CCW" for S.
+    ///
+    /// Args:
+    ///     atom_index: The atom index.
+    ///
+    /// Returns:
+    ///     Chirality string: "Unspecified", "CW", "CCW", or "Other".
+    pub fn atom_chirality(&self, atom_index: usize) -> String {
+        format!(
+            "{:?}",
+            sdfrust::descriptors::atom_chirality(&self.inner, atom_index)
+        )
+    }
+
+    /// Get chirality tags for all atoms.
+    ///
+    /// Returns:
+    ///     List of chirality strings.
+    pub fn all_chiralities(&self) -> Vec<String> {
+        sdfrust::descriptors::all_chiralities(&self.inner)
+            .into_iter()
+            .map(|c| format!("{:?}", c))
+            .collect()
+    }
+
     /// Get the degree (number of bonds) for an atom.
     ///
     /// Args:

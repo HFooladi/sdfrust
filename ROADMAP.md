@@ -613,7 +613,7 @@ print(mol.num_bonds)          # 2
 
 ## Phase 11: ML-Ready Chemical Perception & Featurization ✅ COMPLETE (Tiers 0-3)
 
-**Status:** Tiers 0-3 complete; Tier 4 (CIP chirality, batch pipeline) planned
+**Status:** Tiers 0-4 complete (including CIP chirality); batch pipeline planned
 
 **Motivation:** Make sdfrust the data preprocessing layer for molecular ML — handling fast I/O, feature computation, and tensor output so PyTorch/JAX models can consume data directly, bypassing SMILES-based pipelines.
 
@@ -735,7 +735,7 @@ Validated sdfrust ML features element-by-element against RDKit on 15 molecules:
 - **Multi-molecule drug_library.sdf (6 molecules)**
 
 **Results (all 15 molecules):**
-- OGB atom features (excl. chirality): **100% match** (atomic_num, degree, charge, num_hs, radical, hybridization, aromatic, in_ring)
+- OGB atom features: **100% match** (atomic_num, chirality, degree, charge, num_hs, radical, hybridization, aromatic, in_ring)
 - OGB bond features: **100% match** (bond_type, stereo, conjugated)
 - Hybridization: **100% match** (S, SP, SP2, SP3)
 - Aromaticity (atoms + bonds): **100% match**
@@ -743,8 +743,7 @@ Validated sdfrust ML features element-by-element against RDKit on 15 molecules:
 - ECFP: Reasonable density, self-similarity = 1.0 (exact bit identity not expected — different hash functions)
 - Gasteiger charges: Correlated (r > 0.5), correct signs, reasonable magnitude, charge-conserving
 
-**Known limitation — chirality (OGB feature 1):**
-SDF `stereo_parity=3` ("either") is mapped to chirality=3 in sdfrust, while RDKit maps to 0. Affects ~3 atoms across 15 molecules. **Fix requires Phase 11.11 (CIP chirality perception).**
+**Chirality (OGB feature 1):** **100% match** after Phase 11.11 CIP chirality perception
 
 **Key fixes applied during validation:**
 - H atoms: hybridization = S (not SP3)
@@ -774,7 +773,8 @@ src/
 │   ├── hybridization.rs        # SP/SP2/SP3 (Phase 11.5)
 │   ├── aromaticity.rs          # Hückel-rule perception (Phase 11.6)
 │   ├── conjugation.rs          # Conjugated bond detection (Phase 11.7)
-│   └── gasteiger.rs            # Partial charges (Phase 11.10)
+│   ├── gasteiger.rs            # Partial charges (Phase 11.10)
+│   └── chirality.rs            # CIP R/S perception (Phase 11.11)
 ├── geometry/
 │   ├── neighbor_list.rs        # Cutoff-based neighbor list (Phase 11.2)
 │   └── angles.rs               # Bond + dihedral angles (Phase 11.4)
@@ -786,13 +786,28 @@ src/
     └── ecfp.rs                 # Morgan/ECFP (Phase 11.9)
 ```
 
+### Phase 11.11 — CIP Chirality Perception ✅
+
+**Module:** `src/descriptors/chirality.rs`
+
+- [x] `enum ChiralTag { Unspecified, CW, CCW, Other }` with `to_ogb_index()`
+- [x] CIP priority assignment via BFS expansion with phantom atoms for multiple bonds
+- [x] Stereocenter detection: SP3, 4 substituents, all different CIP priorities, not N
+- [x] R/S determination from 3D signed volume (atom index ordering, matching RDKit)
+- [x] 2D fallback: wedge (Up) → z=+1, dash (Down) → z=-1, then signed volume
+- [x] Implicit H position synthesis (opposite centroid of explicit neighbors)
+- [x] Allowed elements: C, S, P, Se, Si, Ge
+- [x] `atom_chirality(mol, idx)`, `all_chiralities(mol)` — public API
+- [x] OGB featurizer updated: `feat[1] = chiralities[i].to_ogb_index()`
+- [x] Python bindings: `atom_chirality(idx)`, `all_chiralities()`
+- [x] **Completes 9/9 OGB atom features — all match RDKit exactly**
+
+**Key design insight:** CIP priorities determine IF an atom is a stereocenter (all 4 substituents must have different priority). The CW/CCW tag is determined by signed volume using atom INDEX ordering (not CIP priority ordering), matching RDKit's convention.
+
+**Validated on:** aspirin, caffeine, glucose, galactose, acetaminophen, methionine, ibuprofen, dopamine, cholesterol, drug_library (6 molecules) — **0 mismatches** across all atoms.
+
 ### Remaining Phases (Future)
 
-- [ ] **Phase 11.11: CIP chirality** (R/S labels from CIP priority rules)
-  - Completes 9th OGB atom feature (chirality tag)
-  - Currently using SDF stereo_parity which differs from RDKit's CIP perception
-  - Affects ~3/477 atoms in cross-validation (stereo_parity=3 "either" → should be 0)
-  - Most complex algorithm; many ML papers skip chirality features
 - [ ] Phase 11.12: Parallel batch pipeline (optional `rayon` dependency)
 - [ ] Bond order assignment from valence constraints (Phase B of bond inference)
 - [ ] SMILES parsing/generation
@@ -836,7 +851,8 @@ Following pdbrust conventions:
 | 0.4.0   | 9      | Python bindings ✅ |
 | 0.5.0   | 9.7-9.9 | XYZ parser, gzip support, bond inference ✅ |
 | 0.6.0   | 11.0-11.10 | ML features: graph adjacency, valence, SSSR, aromaticity, hybridization, conjugation, OGB featurizer, ECFP, Gasteiger, neighbor list, angles ✅ |
-| 1.0.0   | 10-11.12 | Stable API, CIP chirality, batch pipeline |
+| 0.7.0   | 11.11 | CIP chirality perception — all 9/9 OGB atom features match RDKit ✅ |
+| 1.0.0   | 10-11.12 | Stable API, batch pipeline |
 
 ---
 

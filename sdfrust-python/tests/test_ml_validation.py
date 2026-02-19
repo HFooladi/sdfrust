@@ -295,36 +295,46 @@ class TestOGBAtomFeatures:
         if mismatches:
             pytest.fail(f"{name} ring membership mismatches:\n" + "\n".join(mismatches))
 
-    def test_full_ogb_atom_features(self, molecule_pair):
-        """Full comparison of all 9 OGB atom features.
+    def test_chirality(self, molecule_pair):
+        """Feature 1: Chirality tag should match RDKit (CIP-based perception)."""
+        name, sdf_mol, rdkit_mol = molecule_pair
+        sdf_feats = sdf_mol.ogb_atom_features()
+        chiral_map = {
+            Chem.rdchem.ChiralType.CHI_UNSPECIFIED: 0,
+            Chem.rdchem.ChiralType.CHI_TETRAHEDRAL_CW: 1,
+            Chem.rdchem.ChiralType.CHI_TETRAHEDRAL_CCW: 2,
+            Chem.rdchem.ChiralType.CHI_OTHER: 3,
+        }
+        mismatches = []
+        for i in range(sdf_mol.num_atoms):
+            rdkit_chiral = chiral_map.get(rdkit_mol.GetAtomWithIdx(i).GetChiralTag(), 0)
+            sdf_chiral = sdf_feats[i][1]
+            if sdf_chiral != rdkit_chiral:
+                elem = rdkit_mol.GetAtomWithIdx(i).GetSymbol()
+                mismatches.append(
+                    f"  atom {i} ({elem}): sdfrust={sdf_chiral} rdkit={rdkit_chiral}"
+                )
+        if mismatches:
+            pytest.fail(f"{name} chirality mismatches:\n" + "\n".join(mismatches))
 
-        Known limitation: chirality (feature 1) may differ for atoms with
-        SDF stereo_parity=3 ("either"). sdfrust maps this to 3 (other) while
-        RDKit maps to 0 (unspecified). CIP chirality perception is not yet
-        implemented (Phase 11.11).
-        """
+    def test_full_ogb_atom_features(self, molecule_pair):
+        """Full comparison of all 9 OGB atom features."""
         name, sdf_mol, rdkit_mol = molecule_pair
         sdf_feats = sdf_mol.ogb_atom_features()
         feature_names = ["atomic_num", "chirality", "degree", "charge",
                          "num_hs", "radical", "hybridization", "aromatic", "in_ring"]
         mismatches = []
-        chirality_mismatches = 0
         for i in range(sdf_mol.num_atoms):
             rdkit_feat = rdkit_atom_to_ogb_features(rdkit_mol.GetAtomWithIdx(i))
             for j in range(9):
                 if sdf_feats[i][j] != rdkit_feat[j]:
-                    # Track chirality mismatches separately (known limitation)
-                    if j == 1:
-                        chirality_mismatches += 1
-                        continue
                     elem = rdkit_mol.GetAtomWithIdx(i).GetSymbol()
                     mismatches.append(
                         f"  atom {i} ({elem}) {feature_names[j]}: "
                         f"sdfrust={sdf_feats[i][j]} rdkit={rdkit_feat[j]}"
                     )
         if mismatches:
-            pytest.fail(f"{name}: {len(mismatches)} OGB atom feature mismatches "
-                        f"(+{chirality_mismatches} chirality, known):\n" +
+            pytest.fail(f"{name}: {len(mismatches)} OGB atom feature mismatches:\n" +
                         "\n".join(mismatches))
 
 
@@ -686,7 +696,7 @@ class TestDrugLibrary:
     """Validate features on multi-molecule drug_library.sdf."""
 
     def test_ogb_atom_features(self, drug_library_pair):
-        """OGB atom features should match RDKit (excluding chirality)."""
+        """OGB atom features should match RDKit (all 9 features including chirality)."""
         name, sdf_mol, rdkit_mol = drug_library_pair
         sdf_feats = sdf_mol.ogb_atom_features()
         feature_names = ["atomic_num", "chirality", "degree", "charge",
@@ -695,8 +705,6 @@ class TestDrugLibrary:
         for i in range(sdf_mol.num_atoms):
             rdkit_feat = rdkit_atom_to_ogb_features(rdkit_mol.GetAtomWithIdx(i))
             for j in range(9):
-                if j == 1:  # Skip chirality (known limitation)
-                    continue
                 if sdf_feats[i][j] != rdkit_feat[j]:
                     elem = rdkit_mol.GetAtomWithIdx(i).GetSymbol()
                     mismatches.append(

@@ -30,6 +30,7 @@
 
 pub mod aromaticity;
 pub mod bond_inference;
+pub mod chirality;
 pub mod conjugation;
 pub mod elements;
 pub mod gasteiger;
@@ -53,6 +54,7 @@ pub use topological::{ring_atoms, ring_bonds, ring_count, rotatable_bond_count};
 
 // Re-export new descriptor modules
 pub use aromaticity::{all_aromatic_atoms, all_aromatic_bonds, is_aromatic_atom, is_aromatic_bond};
+pub use chirality::{ChiralTag, all_chiralities, atom_chirality};
 pub use conjugation::{all_conjugated_bonds, is_conjugated_bond};
 pub use gasteiger::{gasteiger_charges, gasteiger_charges_with_params};
 pub use hybridization::{Hybridization, all_hybridizations, atom_hybridization};
