@@ -47,7 +47,7 @@
 //! ```
 
 use crate::bond::{BondOrder, BondStereo};
-use crate::descriptors::aromaticity::all_aromatic_atoms;
+use crate::descriptors::aromaticity::{all_aromatic_atoms, all_aromatic_bonds};
 use crate::descriptors::conjugation::all_conjugated_bonds;
 use crate::descriptors::elements::get_element;
 use crate::descriptors::hybridization::all_hybridizations;
@@ -139,8 +139,9 @@ pub fn ogb_atom_features(mol: &Molecule) -> OgbAtomFeatures {
         // Feature 3: Formal charge (shifted: charge + 5)
         feat[3] = (atom.formal_charge as i32) + 5;
 
-        // Feature 4: Number of Hs (total)
-        feat[4] = valence::total_hydrogen_count(mol, i) as i32;
+        // Feature 4: Number of Hs (implicit only, matching RDKit's GetTotalNumHs
+        // when explicit H atoms are present as separate graph nodes)
+        feat[4] = valence::implicit_hydrogen_count(mol, i) as i32;
 
         // Feature 5: Number of radical electrons
         feat[5] = atom.radical.unwrap_or(0) as i32;
@@ -184,6 +185,7 @@ pub fn ogb_atom_features(mol: &Molecule) -> OgbAtomFeatures {
 pub fn ogb_bond_features(mol: &Molecule) -> OgbBondFeatures {
     let m = mol.bond_count();
     let conjugated = all_conjugated_bonds(mol);
+    let aromatic_bonds = all_aromatic_bonds(mol);
 
     let mut features = Vec::with_capacity(m);
 
@@ -192,26 +194,37 @@ pub fn ogb_bond_features(mol: &Molecule) -> OgbBondFeatures {
 
         // Feature 0: Bond type
         // 0=single, 1=double, 2=triple, 3=aromatic
-        feat[0] = match bond.order {
-            BondOrder::Single => 0,
-            BondOrder::Double => 1,
-            BondOrder::Triple => 2,
-            BondOrder::Aromatic => 3,
-            BondOrder::SingleOrDouble => 0,
-            BondOrder::SingleOrAromatic => 0,
-            BondOrder::DoubleOrAromatic => 1,
-            BondOrder::Any => 0,
-            BondOrder::Coordination => 0,
-            BondOrder::Hydrogen => 0,
+        // Use perceived aromaticity to override Kekulized bond types
+        feat[0] = if aromatic_bonds[i] {
+            3 // Perceived aromatic
+        } else {
+            match bond.order {
+                BondOrder::Single => 0,
+                BondOrder::Double => 1,
+                BondOrder::Triple => 2,
+                BondOrder::Aromatic => 3,
+                BondOrder::SingleOrDouble => 0,
+                BondOrder::SingleOrAromatic => 0,
+                BondOrder::DoubleOrAromatic => 1,
+                BondOrder::Any => 0,
+                BondOrder::Coordination => 0,
+                BondOrder::Hydrogen => 0,
+            }
         };
 
-        // Feature 1: Bond stereo
+        // Feature 1: Bond stereo (E/Z double bond stereo only)
         // 0=none, 1=any, 2=E, 3=Z, 4=CIS, 5=TRANS
-        feat[1] = match bond.stereo {
-            BondStereo::None => 0,
-            BondStereo::Up => 1,
-            BondStereo::Either => 2,
-            BondStereo::Down => 3,
+        // Note: SDF Up/Down on single bonds are chirality indicators (wedge bonds),
+        // not E/Z stereo. Only encode stereo for double bonds.
+        feat[1] = if bond.order == BondOrder::Double {
+            match bond.stereo {
+                BondStereo::None => 0,
+                BondStereo::Up => 1, // E
+                BondStereo::Either => 2,
+                BondStereo::Down => 3, // Z
+            }
+        } else {
+            0 // Single bonds: wedge stereo is for chirality, not OGB bond stereo
         };
 
         // Feature 2: Is conjugated

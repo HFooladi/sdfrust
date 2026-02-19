@@ -20,7 +20,7 @@
 //! ```
 
 use crate::bond::BondOrder;
-use crate::graph::AdjacencyList;
+use crate::graph::{AdjacencyList, is_hydrogen};
 use crate::molecule::Molecule;
 
 /// Atom hybridization state.
@@ -60,6 +60,7 @@ impl Hybridization {
 /// Determine the hybridization of atom `idx`.
 ///
 /// Inference rules:
+/// - Hydrogen atoms → S (single s orbital)
 /// - Any triple bond → SP
 /// - Any double bond or aromatic bond → SP2
 /// - Otherwise → SP3
@@ -82,6 +83,11 @@ impl Hybridization {
 pub fn atom_hybridization(mol: &Molecule, idx: usize) -> Hybridization {
     if idx >= mol.atoms.len() {
         return Hybridization::Other;
+    }
+
+    // Hydrogen atoms use a single s orbital
+    if is_hydrogen(&mol.atoms[idx].element) {
+        return Hybridization::S;
     }
 
     let adj = AdjacencyList::from_molecule(mol);
@@ -129,6 +135,11 @@ pub fn atom_hybridization(mol: &Molecule, idx: usize) -> Hybridization {
 
 /// Compute hybridization for all atoms in the molecule.
 ///
+/// Uses a two-pass approach:
+/// 1. Initial hybridization from bond orders
+/// 2. Upgrade O/N/S atoms from SP3 to SP2 if bonded to any SP2 neighbor
+///    (lone pair conjugation, matching RDKit behavior)
+///
 /// Returns a vector of length `mol.atom_count()`.
 ///
 /// # Example
@@ -147,9 +158,43 @@ pub fn atom_hybridization(mol: &Molecule, idx: usize) -> Hybridization {
 /// assert_eq!(hybs[1], Hybridization::SP3);
 /// ```
 pub fn all_hybridizations(mol: &Molecule) -> Vec<Hybridization> {
-    (0..mol.atom_count())
-        .map(|i| atom_hybridization(mol, i))
-        .collect()
+    let n = mol.atom_count();
+    let mut hybs: Vec<Hybridization> = (0..n).map(|i| atom_hybridization(mol, i)).collect();
+
+    // Second pass: upgrade lone-pair atoms (O, N, S) from SP3 to SP2
+    // if they are bonded to any SP2 neighbor (lone pair conjugation).
+    // This matches RDKit's behavior for esters, carboxylic acids, amides, etc.
+    let adj = AdjacencyList::from_molecule(mol);
+    for i in 0..n {
+        if hybs[i] != Hybridization::SP3 {
+            continue;
+        }
+        if !has_lone_pair(&mol.atoms[i].element) {
+            continue;
+        }
+        // Check if any neighbor is SP2 or SP
+        for &(neighbor, _bond_idx) in adj.neighbors(i) {
+            if hybs[neighbor] == Hybridization::SP2 || hybs[neighbor] == Hybridization::SP {
+                hybs[i] = Hybridization::SP2;
+                break;
+            }
+        }
+    }
+
+    hybs
+}
+
+/// Check if an element has lone pairs that can participate in conjugation.
+fn has_lone_pair(element: &str) -> bool {
+    let elem = element.trim();
+    let upper: String = elem
+        .chars()
+        .next()
+        .map(|c| c.to_uppercase().collect::<String>())
+        .unwrap_or_default()
+        + &elem.chars().skip(1).collect::<String>().to_lowercase();
+
+    matches!(upper.as_str(), "O" | "N" | "S" | "Se" | "P")
 }
 
 #[cfg(test)]
@@ -172,6 +217,8 @@ mod tests {
         mol.bonds.push(Bond::new(0, 4, BondOrder::Single));
 
         assert_eq!(atom_hybridization(&mol, 0), Hybridization::SP3);
+        // Hydrogen atoms should be S hybridization
+        assert_eq!(atom_hybridization(&mol, 1), Hybridization::S);
     }
 
     #[test]
@@ -273,5 +320,38 @@ mod tests {
         assert_eq!(hybs.len(), 2);
         assert_eq!(hybs[0], Hybridization::SP);
         assert_eq!(hybs[1], Hybridization::SP);
+    }
+
+    #[test]
+    fn test_lone_pair_upgrade_ester() {
+        // Ester C(=O)-O: the single-bonded O should be upgraded to SP2
+        let mut mol = Molecule::new("ester");
+        mol.atoms.push(Atom::new(0, "C", 0.0, 0.0, 0.0)); // carbonyl C
+        mol.atoms.push(Atom::new(1, "O", 1.2, 0.0, 0.0)); // carbonyl O
+        mol.atoms.push(Atom::new(2, "O", -0.6, 1.0, 0.0)); // ester O
+        mol.atoms.push(Atom::new(3, "C", -1.5, 1.5, 0.0)); // methyl C
+        mol.bonds.push(Bond::new(0, 1, BondOrder::Double));
+        mol.bonds.push(Bond::new(0, 2, BondOrder::Single));
+        mol.bonds.push(Bond::new(2, 3, BondOrder::Single));
+
+        let hybs = all_hybridizations(&mol);
+        assert_eq!(hybs[0], Hybridization::SP2); // C with double bond
+        assert_eq!(hybs[1], Hybridization::SP2); // O with double bond
+        assert_eq!(hybs[2], Hybridization::SP2); // O upgraded (lone pair conjugation)
+        assert_eq!(hybs[3], Hybridization::SP3); // Methyl C stays SP3
+    }
+
+    #[test]
+    fn test_water_stays_sp3() {
+        // Water: O with two H neighbors — should remain SP3
+        let mut mol = Molecule::new("water");
+        mol.atoms.push(Atom::new(0, "O", 0.0, 0.0, 0.0));
+        mol.atoms.push(Atom::new(1, "H", 0.96, 0.0, 0.0));
+        mol.atoms.push(Atom::new(2, "H", -0.24, 0.93, 0.0));
+        mol.bonds.push(Bond::new(0, 1, BondOrder::Single));
+        mol.bonds.push(Bond::new(0, 2, BondOrder::Single));
+
+        let hybs = all_hybridizations(&mol);
+        assert_eq!(hybs[0], Hybridization::SP3); // No SP2 neighbor to trigger upgrade
     }
 }

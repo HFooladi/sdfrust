@@ -726,9 +726,38 @@ print(mol.num_bonds)          # 2
 - [x] ECFP fingerprints with Tanimoto similarity
 - [x] Neighbor list and angle computation (geometry feature)
 
+### Phase 11 RDKit Cross-Validation ✅
+
+**Test file:** `sdfrust-python/tests/test_ml_validation.py` (267 tests)
+
+Validated sdfrust ML features element-by-element against RDKit on 15 molecules:
+- **Single-molecule files (9):** aspirin, caffeine, glucose, galactose, acetaminophen, methionine, ibuprofen, dopamine, cholesterol
+- **Multi-molecule drug_library.sdf (6 molecules)**
+
+**Results (all 15 molecules):**
+- OGB atom features (excl. chirality): **100% match** (atomic_num, degree, charge, num_hs, radical, hybridization, aromatic, in_ring)
+- OGB bond features: **100% match** (bond_type, stereo, conjugated)
+- Hybridization: **100% match** (S, SP, SP2, SP3)
+- Aromaticity (atoms + bonds): **100% match**
+- Ring perception (count, membership, sizes): **100% match**
+- ECFP: Reasonable density, self-similarity = 1.0 (exact bit identity not expected — different hash functions)
+- Gasteiger charges: Correlated (r > 0.5), correct signs, reasonable magnitude, charge-conserving
+
+**Known limitation — chirality (OGB feature 1):**
+SDF `stereo_parity=3` ("either") is mapped to chirality=3 in sdfrust, while RDKit maps to 0. Affects ~3 atoms across 15 molecules. **Fix requires Phase 11.11 (CIP chirality perception).**
+
+**Key fixes applied during validation:**
+- H atoms: hybridization = S (not SP3)
+- O/N/S lone-pair upgrade: SP3 → SP2 when bonded to SP2 neighbor (matches RDKit)
+- Implicit H count used for OGB feature 4 (matches RDKit's `GetTotalNumHs()` when explicit H atoms are graph nodes)
+- Perceived aromaticity used for bond type encoding (handles Kekulized SDF files)
+- Bond stereo only encoded on double bonds (SDF wedge bonds on single bonds are chirality indicators, not E/Z stereo)
+- Aromaticity: sp3 C with no double bonds breaks ring conjugation; sp2 C with exocyclic C=O (e.g., caffeine purines) contributes 0 pi electrons
+
 ### Phase 11 Test Coverage
 
 - 585+ tests passing (unit + integration + doc-tests)
+- 267 RDKit cross-validation tests (15 molecules × multiple feature categories)
 - Benzene, pyrrole, furan, cyclopentane, naphthalene, cubane tested for SSSR
 - Kekulized and aromatic form aromaticity detection
 - Butadiene conjugation chain
@@ -759,7 +788,11 @@ src/
 
 ### Remaining Phases (Future)
 
-- [ ] Phase 11.11: CIP chirality (R/S labels from CIP priority rules)
+- [ ] **Phase 11.11: CIP chirality** (R/S labels from CIP priority rules)
+  - Completes 9th OGB atom feature (chirality tag)
+  - Currently using SDF stereo_parity which differs from RDKit's CIP perception
+  - Affects ~3/477 atoms in cross-validation (stereo_parity=3 "either" → should be 0)
+  - Most complex algorithm; many ML papers skip chirality features
 - [ ] Phase 11.12: Parallel batch pipeline (optional `rayon` dependency)
 - [ ] Bond order assignment from valence constraints (Phase B of bond inference)
 - [ ] SMILES parsing/generation
