@@ -26,6 +26,8 @@ A fast, pure-Rust parser for SDF (Structure Data File), MOL2, and XYZ chemical s
 
 ### Rust
 
+**Prerequisites:** Rust 1.85+ (edition 2024)
+
 Add to your `Cargo.toml`:
 
 ```toml
@@ -33,21 +35,49 @@ Add to your `Cargo.toml`:
 sdfrust = "0.6"
 ```
 
-### Python
+Or via the command line:
 
 ```bash
-# From source (requires Rust toolchain)
+cargo add sdfrust
+```
+
+#### Optional Features
+
+| Feature | Description | Dependency |
+|---------|-------------|------------|
+| `geometry` | 3D GNN support: cutoff-based neighbor lists, bond/dihedral angles | [nalgebra](https://crates.io/crates/nalgebra) |
+| `gzip` | Transparent decompression of `.gz` files | [flate2](https://crates.io/crates/flate2) |
+
+Enable features in `Cargo.toml`:
+
+```toml
+[dependencies]
+sdfrust = { version = "0.6", features = ["geometry", "gzip"] }
+```
+
+### Python
+
+**Prerequisites:** Python >= 3.9, Rust toolchain (for building from source)
+
+```bash
+# Development install (from source)
 cd sdfrust-python
 pip install maturin
 maturin develop --features numpy
+
+# Build a wheel for distribution
+maturin build --release --features numpy
+pip install target/wheels/sdfrust-*.whl
 ```
+
+> **Note:** If you encounter linker errors in a Conda environment, run `unset CONDA_PREFIX` before building.
 
 ## Quick Start
 
 ### Rust
 
 ```rust
-use sdfrust::{parse_sdf_file, parse_mol2_file, parse_xyz_file, parse_auto_file, write_sdf_file};
+use sdfrust::{parse_sdf_file, parse_sdf_file_multi, parse_mol2_file, parse_xyz_file, parse_auto_file, iter_sdf_file, write_sdf_file};
 
 // Parse a single molecule (any format)
 let mol = parse_sdf_file("molecule.sdf")?;
