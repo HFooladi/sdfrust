@@ -143,11 +143,7 @@ impl<R: BufRead> SdfV3000Parser<R> {
         let mut sgroups = Vec::new();
         let mut collections = Vec::new();
 
-        loop {
-            let Some(line) = self.read_v30_line()? else {
-                break;
-            };
-
+        while let Some(line) = self.read_v30_line()? {
             if line.starts_with("END CTAB") {
                 break;
             } else if line.starts_with("BEGIN SGROUP") {
@@ -341,14 +337,12 @@ impl<R: BufRead> SdfV3000Parser<R> {
                     "CFG" => {
                         stereo_parity = value.parse().ok();
                     }
-                    "RGROUPS" => {
-                        // Parse R-group attachment, format: (n rg1 rg2...)
-                        if value.starts_with('(') && value.ends_with(')') {
-                            let inner = &value[1..value.len() - 1];
-                            let nums: Vec<&str> = inner.split_whitespace().collect();
-                            if nums.len() >= 2 {
-                                rgroup_label = nums[1].parse().ok();
-                            }
+                    // Parse R-group attachment, format: (n rg1 rg2...)
+                    "RGROUPS" if value.starts_with('(') && value.ends_with(')') => {
+                        let inner = &value[1..value.len() - 1];
+                        let nums: Vec<&str> = inner.split_whitespace().collect();
+                        if nums.len() >= 2 {
+                            rgroup_label = nums[1].parse().ok();
                         }
                     }
                     _ => {} // Ignore unknown keys
@@ -523,11 +517,7 @@ impl<R: BufRead> SdfV3000Parser<R> {
     fn parse_sgroup_block(&mut self, id_to_index: &HashMap<u32, usize>) -> Result<Vec<SGroup>> {
         let mut sgroups = Vec::new();
 
-        loop {
-            let Some(line) = self.read_v30_line()? else {
-                break;
-            };
-
+        while let Some(line) = self.read_v30_line()? {
             if line.starts_with("END SGROUP") {
                 break;
             }
@@ -614,11 +604,7 @@ impl<R: BufRead> SdfV3000Parser<R> {
         let mut collections = Vec::new();
         let mut current_id: u32 = 0;
 
-        loop {
-            let Some(line) = self.read_v30_line()? else {
-                break;
-            };
-
+        while let Some(line) = self.read_v30_line()? {
             if line.starts_with("END COLLECTION") {
                 break;
             }
@@ -687,11 +673,7 @@ impl<R: BufRead> SdfV3000Parser<R> {
     ) -> Result<Vec<StereoGroup>> {
         let mut stereogroups = Vec::new();
 
-        loop {
-            let Some(line) = self.read_v30_line()? else {
-                break;
-            };
-
+        while let Some(line) = self.read_v30_line()? {
             if line.starts_with("END STEREO") {
                 break;
             }
