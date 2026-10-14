@@ -56,8 +56,11 @@ impl Ring {
 
 /// Compute the Smallest Set of Smallest Rings (SSSR).
 ///
-/// Uses a shortest-path based approach: for each edge not in the spanning tree,
-/// find the shortest cycle through that edge using BFS.
+/// Returns a minimum cycle basis (Horton's algorithm): candidate cycles are
+/// built from shortest paths out of every ring atom, sorted by size, and
+/// kept when linearly independent (over GF(2)) of the smaller ones. This is
+/// guaranteed minimal, including for bridged systems such as cubane,
+/// adamantane and norbornane. Ring order is deterministic.
 ///
 /// # Example
 ///
@@ -92,357 +95,160 @@ pub fn sssr(mol: &Molecule) -> Vec<Ring> {
         return vec![];
     }
 
-    let adj = AdjacencyList::from_molecule(mol);
-    let num_components = connected_component_count(mol);
-
     // Cyclomatic number: number of independent rings
-    let num_rings = if m + num_components > n {
-        m - n + num_components
-    } else {
-        return vec![];
-    };
-
-    if num_rings == 0 {
+    let num_components = connected_component_count(mol);
+    if m + num_components <= n {
         return vec![];
     }
+    let num_rings = m + num_components - n;
 
-    // Build spanning tree using BFS, collect non-tree edges
-    let mut in_tree = vec![false; m];
-    let mut visited = vec![false; n];
-    let mut non_tree_edges: Vec<usize> = Vec::new();
+    let adj = AdjacencyList::from_molecule(mol);
+    let ring_bond = crate::descriptors::topological::ring_bonds(mol);
 
-    for start in 0..n {
-        if visited[start] {
+    // Horton candidates: for each ring atom r and ring bond (x, y), the cycle
+    // P(r, x) + (x, y) + P(y, r) using one BFS shortest-path tree per root.
+    let mut candidates: Vec<Vec<usize>> = Vec::new();
+    let mut seen: HashSet<Vec<usize>> = HashSet::new();
+    let mut parent_bond = vec![usize::MAX; n];
+    let mut dist = vec![usize::MAX; n];
+    let mut on_path = vec![false; n];
+    for root in 0..n {
+        if !adj.neighbors(root).iter().any(|&(_, b)| ring_bond[b]) {
             continue;
         }
-        let mut queue = VecDeque::new();
-        visited[start] = true;
-        queue.push_back(start);
-
+        // BFS over ring bonds only
+        let mut reached = vec![root];
+        dist[root] = 0;
+        parent_bond[root] = usize::MAX;
+        let mut queue = VecDeque::from([root]);
         while let Some(u) = queue.pop_front() {
-            for &(v, bond_idx) in adj.neighbors(u) {
-                if !visited[v] {
-                    visited[v] = true;
-                    in_tree[bond_idx] = true;
+            for &(v, b) in adj.neighbors(u) {
+                if ring_bond[b] && dist[v] == usize::MAX {
+                    dist[v] = dist[u] + 1;
+                    parent_bond[v] = b;
+                    reached.push(v);
                     queue.push_back(v);
                 }
             }
         }
-    }
 
-    // Non-tree edges form cycles
-    for (bond_idx, &is_tree) in in_tree.iter().enumerate() {
-        if !is_tree {
-            non_tree_edges.push(bond_idx);
-        }
-    }
-
-    // For each non-tree edge, find the shortest cycle containing it
-    let mut candidate_rings: Vec<(usize, Vec<usize>)> = Vec::new(); // (size, atom_path)
-
-    for &edge_idx in &non_tree_edges {
-        let bond = &mol.bonds[edge_idx];
-        // Find shortest path from bond.atom1 to bond.atom2 NOT using this edge
-        if let Some(path) = shortest_path_avoiding_edge(&adj, bond.atom1, bond.atom2, edge_idx, n) {
-            candidate_rings.push((path.len(), path));
-        }
-    }
-
-    // Sort by ring size (smallest first) for SSSR selection
-    candidate_rings.sort_by_key(|(size, _)| *size);
-
-    // Select linearly independent rings using bond-set independence
-    let mut selected_rings: Vec<Vec<usize>> = Vec::new();
-    let mut selected_bond_sets: Vec<HashSet<usize>> = Vec::new();
-
-    for (_size, atom_path) in &candidate_rings {
-        if selected_rings.len() >= num_rings {
-            break;
-        }
-
-        let bond_set = path_to_bond_set(atom_path, mol, &adj);
-
-        if is_linearly_independent(&bond_set, &selected_bond_sets) {
-            selected_rings.push(atom_path.clone());
-            selected_bond_sets.push(bond_set);
-        }
-    }
-
-    // If we don't have enough from non-tree edges, also try BFS-found rings
-    if selected_rings.len() < num_rings {
-        // Find additional rings by shortest path between endpoints of remaining non-tree edges
-        // using different spanning trees or by enumerating small cycles
-        let extra = find_additional_rings(
-            mol,
-            &adj,
-            num_rings - selected_rings.len(),
-            &selected_bond_sets,
-        );
-        for (path, bond_set) in extra {
-            if selected_rings.len() >= num_rings {
-                break;
+        for (b, bond) in mol.bonds.iter().enumerate() {
+            let (x, y) = (bond.atom1, bond.atom2);
+            if !ring_bond[b]
+                || x >= n
+                || y >= n
+                || dist[x] == usize::MAX
+                || dist[y] == usize::MAX
+                || parent_bond[x] == b
+                || parent_bond[y] == b
+            {
+                continue;
             }
-            if is_linearly_independent(&bond_set, &selected_bond_sets) {
-                selected_rings.push(path);
-                selected_bond_sets.push(bond_set);
+            let path_x = tree_path(mol, x, &parent_bond);
+            let path_y = tree_path(mol, y, &parent_bond);
+            // The two paths may only meet at the root
+            for &bp in &path_x {
+                let bnd = &mol.bonds[bp];
+                on_path[bnd.atom1] = true;
+                on_path[bnd.atom2] = true;
+            }
+            on_path[root] = false;
+            let disjoint = !path_y.iter().any(|&bp| {
+                let bnd = &mol.bonds[bp];
+                (bnd.atom1 != root && on_path[bnd.atom1])
+                    || (bnd.atom2 != root && on_path[bnd.atom2])
+            }) && !(on_path[y] && y != root);
+            for &bp in &path_x {
+                let bnd = &mol.bonds[bp];
+                on_path[bnd.atom1] = false;
+                on_path[bnd.atom2] = false;
+            }
+            if !disjoint {
+                continue;
+            }
+            let mut cycle: Vec<usize> = path_x.into_iter().chain(path_y).chain([b]).collect();
+            cycle.sort_unstable();
+            cycle.dedup();
+            if cycle.len() >= 3 && seen.insert(cycle.clone()) {
+                candidates.push(cycle);
             }
         }
-    }
 
-    // Convert to Ring structs
-    selected_rings
-        .iter()
-        .zip(selected_bond_sets.iter())
-        .map(|(atoms, bonds)| Ring {
-            atoms: atoms.clone(),
-            bonds: bonds.iter().copied().collect(),
-        })
-        .collect()
-}
-
-/// Find additional rings using BFS from every atom to find small cycles.
-fn find_additional_rings(
-    mol: &Molecule,
-    adj: &AdjacencyList,
-    needed: usize,
-    existing_bond_sets: &[HashSet<usize>],
-) -> Vec<(Vec<usize>, HashSet<usize>)> {
-    let n = adj.num_atoms();
-    let mut result = Vec::new();
-    let mut found_bond_sets: Vec<HashSet<usize>> = existing_bond_sets.to_vec();
-
-    // For each atom, do BFS to find short cycles
-    for start in 0..n {
-        if result.len() >= needed {
-            break;
-        }
-
-        let cycles = find_short_cycles_from(start, adj, n);
-        for cycle in cycles {
-            if result.len() >= needed {
-                break;
-            }
-            let bond_set = path_to_bond_set(&cycle, mol, adj);
-            if is_linearly_independent(&bond_set, &found_bond_sets) {
-                found_bond_sets.push(bond_set.clone());
-                result.push((cycle, bond_set));
-            }
+        for v in reached {
+            dist[v] = usize::MAX;
+            parent_bond[v] = usize::MAX;
         }
     }
 
-    result
-}
+    candidates.sort_by(|a, b| a.len().cmp(&b.len()).then_with(|| a.cmp(b)));
 
-/// Find short cycles starting from a given atom using BFS.
-fn find_short_cycles_from(start: usize, adj: &AdjacencyList, n: usize) -> Vec<Vec<usize>> {
-    let mut cycles = Vec::new();
-    let mut dist = vec![usize::MAX; n];
-    let mut parent = vec![usize::MAX; n];
-    let mut queue = VecDeque::new();
-
-    dist[start] = 0;
-    queue.push_back(start);
-
-    while let Some(u) = queue.pop_front() {
-        for &(v, _bond_idx) in adj.neighbors(u) {
-            if dist[v] == usize::MAX {
-                dist[v] = dist[u] + 1;
-                parent[v] = u;
-                queue.push_back(v);
-            } else if v != parent[u] && dist[v] >= dist[u] {
-                // Found a cycle: trace paths from u and v back to their LCA
-                let path_u = trace_to_root(u, &parent);
-                let path_v = trace_to_root(v, &parent);
-
-                // Find where the paths diverge (LCA)
-                let cycle = merge_paths_to_cycle(&path_u, &path_v);
-                if cycle.len() >= 3 {
-                    // Deduplicate
-                    let normalized = normalize_cycle(&cycle);
-                    cycles.push(normalized);
+    // Greedy selection with incremental GF(2) elimination over bond bitsets
+    let words = m.div_ceil(64);
+    let mut basis: Vec<(usize, Vec<u64>)> = Vec::new(); // (pivot bit, row)
+    let mut rings = Vec::with_capacity(num_rings);
+    for cycle in candidates {
+        let mut row = vec![0u64; words];
+        for &b in &cycle {
+            row[b / 64] |= 1 << (b % 64);
+        }
+        for (pivot, basis_row) in &basis {
+            if row[pivot / 64] >> (pivot % 64) & 1 == 1 {
+                for (w, bw) in row.iter_mut().zip(basis_row) {
+                    *w ^= bw;
                 }
             }
         }
+        let Some(pivot) = row
+            .iter()
+            .enumerate()
+            .find(|(_, w)| **w != 0)
+            .map(|(i, w)| i * 64 + w.trailing_zeros() as usize)
+        else {
+            continue; // dependent on smaller rings
+        };
+        basis.push((pivot, row));
+        rings.push(ring_from_bonds(mol, &cycle));
+        if rings.len() == num_rings {
+            break;
+        }
     }
-
-    cycles
+    rings
 }
 
-/// Trace path from node to root (start of BFS).
-fn trace_to_root(node: usize, parent: &[usize]) -> Vec<usize> {
-    let mut path = vec![node];
-    let mut current = node;
-    while parent[current] != usize::MAX {
-        current = parent[current];
-        path.push(current);
+/// Bonds on the BFS-tree path from `atom` back to the root.
+fn tree_path(mol: &Molecule, mut atom: usize, parent_bond: &[usize]) -> Vec<usize> {
+    let mut path = Vec::new();
+    while parent_bond[atom] != usize::MAX {
+        let b = parent_bond[atom];
+        path.push(b);
+        let bond = &mol.bonds[b];
+        atom = if bond.atom1 == atom {
+            bond.atom2
+        } else {
+            bond.atom1
+        };
     }
     path
 }
 
-/// Merge two paths from their common root to form a cycle.
-fn merge_paths_to_cycle(path_u: &[usize], path_v: &[usize]) -> Vec<usize> {
-    // Both paths end at the same root (BFS start)
-    // Find the longest common suffix (from root)
-    let mut i = path_u.len();
-    let mut j = path_v.len();
-
-    // Walk from root to find divergence point
-    while i > 0 && j > 0 && path_u[i - 1] == path_v[j - 1] {
-        i -= 1;
-        j -= 1;
+/// Builds a [`Ring`] with atoms and bonds in walking order from a cycle's bonds.
+fn ring_from_bonds(mol: &Molecule, cycle: &[usize]) -> Ring {
+    let start_bond = cycle[0];
+    let start = mol.bonds[start_bond].atom1;
+    let mut atoms = vec![start];
+    let mut bonds = vec![start_bond];
+    let mut current = mol.bonds[start_bond].atom2;
+    while current != start && bonds.len() < cycle.len() {
+        atoms.push(current);
+        let next = cycle
+            .iter()
+            .copied()
+            .find(|&b| !bonds.contains(&b) && mol.bonds[b].contains_atom(current));
+        let Some(b) = next else { break };
+        bonds.push(b);
+        current = mol.bonds[b].other_atom(current).unwrap_or(start);
     }
-
-    // The divergence point
-    let lca_idx_u = i; // path_u[i..] is common, path_u[..=i] is the unique part (inclusive of LCA)
-    let lca_idx_v = j;
-
-    // Cycle = path_u[0..=lca_idx_u] + path_v[0..lca_idx_v] reversed
-    let mut cycle: Vec<usize> = path_u[..=lca_idx_u].to_vec();
-    for k in (0..lca_idx_v).rev() {
-        cycle.push(path_v[k]);
-    }
-
-    cycle
-}
-
-/// Normalize a cycle for deduplication (rotate to start at smallest index).
-fn normalize_cycle(cycle: &[usize]) -> Vec<usize> {
-    if cycle.is_empty() {
-        return vec![];
-    }
-    let min_pos = cycle.iter().enumerate().min_by_key(|&(_, v)| *v).unwrap().0;
-    let mut normalized = Vec::with_capacity(cycle.len());
-    for i in 0..cycle.len() {
-        normalized.push(cycle[(min_pos + i) % cycle.len()]);
-    }
-    normalized
-}
-
-/// Find shortest path from `src` to `dst` in the graph, avoiding `excluded_edge`.
-fn shortest_path_avoiding_edge(
-    adj: &AdjacencyList,
-    src: usize,
-    dst: usize,
-    excluded_edge: usize,
-    n: usize,
-) -> Option<Vec<usize>> {
-    let mut dist = vec![usize::MAX; n];
-    let mut parent = vec![usize::MAX; n];
-    let mut queue = VecDeque::new();
-
-    dist[src] = 0;
-    queue.push_back(src);
-
-    while let Some(u) = queue.pop_front() {
-        if u == dst {
-            // Reconstruct path
-            let mut path = vec![dst];
-            let mut current = dst;
-            while current != src {
-                current = parent[current];
-                path.push(current);
-            }
-            path.reverse();
-            return Some(path);
-        }
-
-        for &(v, bond_idx) in adj.neighbors(u) {
-            if bond_idx == excluded_edge {
-                continue;
-            }
-            if dist[v] == usize::MAX {
-                dist[v] = dist[u] + 1;
-                parent[v] = u;
-                queue.push_back(v);
-            }
-        }
-    }
-
-    None
-}
-
-/// Convert an atom path (cycle) to a set of bond indices.
-fn path_to_bond_set(atom_path: &[usize], _mol: &Molecule, adj: &AdjacencyList) -> HashSet<usize> {
-    let mut bonds = HashSet::new();
-    let len = atom_path.len();
-    for i in 0..len {
-        let a = atom_path[i];
-        let b = atom_path[(i + 1) % len];
-        // Find bond between a and b
-        for &(neighbor, bond_idx) in adj.neighbors(a) {
-            if neighbor == b {
-                bonds.insert(bond_idx);
-                break;
-            }
-        }
-    }
-    bonds
-}
-
-/// Check if a bond set is linearly independent of existing bond sets.
-///
-/// Uses GF(2) vector space: a ring is independent if its bond set cannot
-/// be expressed as the symmetric difference of a subset of existing rings.
-fn is_linearly_independent(new_bonds: &HashSet<usize>, existing: &[HashSet<usize>]) -> bool {
-    if existing.is_empty() {
-        return true;
-    }
-
-    // Use Gaussian elimination over GF(2)
-    // Convert bond sets to bit vectors
-    let max_bond = new_bonds
-        .iter()
-        .copied()
-        .chain(existing.iter().flat_map(|s| s.iter().copied()))
-        .max()
-        .unwrap_or(0)
-        + 1;
-
-    let to_bitvec = |s: &HashSet<usize>| -> Vec<bool> {
-        let mut bv = vec![false; max_bond];
-        for &b in s {
-            bv[b] = true;
-        }
-        bv
-    };
-
-    // Build matrix from existing + new
-    let mut matrix: Vec<Vec<bool>> = existing.iter().map(&to_bitvec).collect();
-    matrix.push(to_bitvec(new_bonds));
-
-    // Gaussian elimination over GF(2)
-    let rows = matrix.len();
-    let cols = max_bond;
-    let mut pivot_row = 0;
-
-    for col in 0..cols {
-        // Find pivot
-        let mut found = false;
-        for row in pivot_row..rows {
-            if matrix[row][col] {
-                matrix.swap(pivot_row, row);
-                found = true;
-                break;
-            }
-        }
-        if !found {
-            continue;
-        }
-
-        // Eliminate
-        let pivot_vals: Vec<bool> = matrix[pivot_row].clone();
-        for (row, row_data) in matrix.iter_mut().enumerate() {
-            if row != pivot_row && row_data[col] {
-                for (c, &pv) in pivot_vals.iter().enumerate() {
-                    row_data[c] ^= pv;
-                }
-            }
-        }
-        pivot_row += 1;
-    }
-
-    // The new ring (last row) is independent if it wasn't eliminated to zero
-    matrix[rows - 1].iter().any(|&b| b)
+    Ring { atoms, bonds }
 }
 
 /// Count connected components using union-find.

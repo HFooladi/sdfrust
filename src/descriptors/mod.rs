@@ -38,6 +38,7 @@ pub mod gasteiger;
 pub mod hybridization;
 pub mod molecular;
 pub mod rings;
+pub mod stereo;
 pub mod topological;
 pub mod valence;
 

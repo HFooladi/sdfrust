@@ -80,7 +80,7 @@ impl ChiralTag {
 /// Each subsequent layer = sorted (descending) atomic numbers at that BFS distance.
 /// Compared lexicographically: first divergent layer decides; higher atomic number = higher priority.
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct CipPriority {
+pub(crate) struct CipPriority {
     layers: Vec<Vec<u8>>,
 }
 
@@ -122,7 +122,7 @@ fn bond_multiplicity(order: BondOrder) -> usize {
 }
 
 /// Compute CIP priority for a substituent starting at `start_neighbor` of `center`.
-fn compute_cip_priority(
+pub(crate) fn compute_cip_priority(
     mol: &Molecule,
     adj: &AdjacencyList,
     center: usize,

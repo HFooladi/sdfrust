@@ -1,5 +1,6 @@
 use std::io::Write;
 
+use crate::bond::BondStereo;
 use crate::error::{Result, SdfError};
 use crate::molecule::Molecule;
 
@@ -138,7 +139,11 @@ pub fn write_sdf<W: Write>(writer: &mut W, molecule: &Molecule) -> Result<()> {
             bond.atom1 + 1, // Convert to 1-based
             bond.atom2 + 1,
             bond.order.to_sdf(),
-            bond.stereo.to_sdf()
+            if bond.order == crate::bond::BondOrder::Double && bond.stereo == BondStereo::Either {
+                3 // V2000 "cis or trans" for double bonds
+            } else {
+                bond.stereo.to_sdf()
+            }
         )?;
     }
 

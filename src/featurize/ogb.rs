@@ -30,8 +30,9 @@
 //! | 1 | Bond stereo | 0=NONE, 1=Z, 2=E, 3=CIS, 4=TRANS, 5=ANY (6) |
 //! | 2 | Is conjugated | 0 or 1 (2) |
 //!
-//! Bond stereo: E/Z perception from coordinates is not implemented yet, so only
-//! `STEREONONE` (0) and `STEREOANY` (5, for "either" double bonds) are emitted.
+//! Bond stereo is perceived from coordinates
+//! ([`crate::descriptors::stereo::double_bond_stereo`]): Z = 1, E = 2, and
+//! "either" double bonds = 5 (STEREOANY); CIS/TRANS are not emitted.
 //!
 //! # Example
 //!
@@ -54,12 +55,13 @@
 //! assert_eq!(bond_feats.num_bonds, 2);
 //! ```
 
-use crate::bond::{BondOrder, BondStereo};
+use crate::bond::BondOrder;
 use crate::descriptors::aromaticity::{all_aromatic_atoms, all_aromatic_bonds};
 use crate::descriptors::chirality::all_chiralities;
 use crate::descriptors::conjugation::all_conjugated_bonds;
 use crate::descriptors::elements::get_element;
 use crate::descriptors::hybridization::all_hybridizations;
+use crate::descriptors::stereo::{DoubleBondStereo, double_bond_stereo};
 use crate::descriptors::topological::ring_atoms;
 use crate::descriptors::valence;
 use crate::graph::AdjacencyList;
@@ -201,6 +203,7 @@ pub fn ogb_bond_features(mol: &Molecule) -> OgbBondFeatures {
     let m = mol.bond_count();
     let conjugated = all_conjugated_bonds(mol);
     let aromatic_bonds = all_aromatic_bonds(mol);
+    let stereo = double_bond_stereo(mol);
 
     let mut features = Vec::with_capacity(m);
 
@@ -222,13 +225,13 @@ pub fn ogb_bond_features(mol: &Molecule) -> OgbBondFeatures {
         };
 
         // Feature 1: Bond stereo, index into
-        // [STEREONONE, STEREOZ, STEREOE, STEREOCIS, STEREOTRANS, STEREOANY].
-        // Wedge flags (Up/Down) describe tetrahedral centers, not E/Z, so only an
-        // explicit "either" double bond is encoded (as STEREOANY).
-        feat[1] = if bond.order == BondOrder::Double && bond.stereo == BondStereo::Either {
-            5
-        } else {
-            0
+        // [STEREONONE, STEREOZ, STEREOE, STEREOCIS, STEREOTRANS, STEREOANY],
+        // perceived from coordinates (wedge flags are tetrahedral, not E/Z).
+        feat[1] = match stereo[i] {
+            DoubleBondStereo::None => 0,
+            DoubleBondStereo::Z => 1,
+            DoubleBondStereo::E => 2,
+            DoubleBondStereo::Any => 5,
         };
 
         // Feature 2: Is conjugated
@@ -302,7 +305,7 @@ pub fn ogb_graph_features(mol: &Molecule) -> OgbGraphFeatures {
 mod tests {
     use super::*;
     use crate::atom::Atom;
-    use crate::bond::{Bond, BondOrder};
+    use crate::bond::{Bond, BondOrder, BondStereo};
 
     fn make_water() -> Molecule {
         let mut mol = Molecule::new("water");
@@ -489,16 +492,24 @@ mod tests {
     }
 
     #[test]
-    fn test_wedge_flags_on_double_bond_are_not_ez() {
-        let mut mol = Molecule::new("ethylene");
-        mol.atoms.push(Atom::new(0, "C", 0.0, 0.0, 0.0));
-        mol.atoms.push(Atom::new(1, "C", 1.3, 0.0, 0.0));
-        let mut b = Bond::new(0, 1, BondOrder::Double);
+    fn test_bond_stereo_from_coordinates() {
+        // trans-2-butene drawn in 2D: E = 2; wedge flags don't change that
+        let mut mol = Molecule::new("2-butene");
+        mol.atoms.push(Atom::new(0, "C", -1.3, 0.75, 0.0));
+        mol.atoms.push(Atom::new(1, "C", -0.65, 0.0, 0.0));
+        mol.atoms.push(Atom::new(2, "C", 0.65, 0.0, 0.0));
+        mol.atoms.push(Atom::new(3, "C", 1.3, -0.75, 0.0));
+        mol.bonds.push(Bond::new(0, 1, BondOrder::Single));
+        let mut b = Bond::new(1, 2, BondOrder::Double);
         b.stereo = BondStereo::Up;
         mol.bonds.push(b);
-        assert_eq!(ogb_bond_features(&mol).features[0][1], 0);
+        mol.bonds.push(Bond::new(2, 3, BondOrder::Single));
+        assert_eq!(ogb_bond_features(&mol).features[1][1], 2); // STEREOE
 
-        mol.bonds[0].stereo = BondStereo::Either;
-        assert_eq!(ogb_bond_features(&mol).features[0][1], 5); // STEREOANY
+        mol.atoms[3].y = 0.75;
+        assert_eq!(ogb_bond_features(&mol).features[1][1], 1); // STEREOZ
+
+        mol.bonds[1].stereo = BondStereo::Either;
+        assert_eq!(ogb_bond_features(&mol).features[1][1], 5); // STEREOANY
     }
 }
