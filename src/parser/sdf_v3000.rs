@@ -360,6 +360,7 @@ impl<R: BufRead> SdfV3000Parser<R> {
             mass_difference: 0,
             isotope,
             partial_charge: None,
+            no_implicit: false,
             stereo_parity,
             hydrogen_count,
             valence,
@@ -1163,7 +1164,7 @@ $$$$
         assert_eq!(mol.name, "benzene");
         assert_eq!(mol.atom_count(), 6);
         assert_eq!(mol.bond_count(), 6);
-        assert_eq!(mol.formula(), "C6");
+        assert_eq!(mol.formula(), "C6H6"); // implicit H counted
 
         // All bonds should be aromatic
         for bond in &mol.bonds {

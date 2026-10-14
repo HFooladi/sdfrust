@@ -31,6 +31,11 @@ pub struct Atom {
     /// Not used for formal-charge or valence calculations.
     pub partial_charge: Option<f64>,
 
+    /// If true, no implicit hydrogens are added to this atom: all of its
+    /// hydrogens are explicit atoms. Set by the MOL2 and XYZ parsers, whose
+    /// formats list every hydrogen (RDKit's `NoImplicit`).
+    pub no_implicit: bool,
+
     /// Stereo parity (0 = not stereo, 1 = odd, 2 = even, 3 = either/unknown).
     pub stereo_parity: Option<u8>,
 
@@ -66,6 +71,7 @@ impl Atom {
             mass_difference: 0,
             isotope: None,
             partial_charge: None,
+            no_implicit: false,
             stereo_parity: None,
             hydrogen_count: None,
             valence: None,
@@ -117,6 +123,7 @@ impl Default for Atom {
             mass_difference: 0,
             isotope: None,
             partial_charge: None,
+            no_implicit: false,
             stereo_parity: None,
             hydrogen_count: None,
             valence: None,

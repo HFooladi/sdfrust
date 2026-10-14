@@ -478,6 +478,7 @@ impl<R: BufRead> SdfParser<R> {
             mass_difference,
             isotope: None,
             partial_charge: None,
+            no_implicit: false,
             stereo_parity,
             hydrogen_count,
             valence,

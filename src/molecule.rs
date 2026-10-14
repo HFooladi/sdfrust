@@ -179,42 +179,55 @@ impl Molecule {
             .collect()
     }
 
-    /// Returns the molecular formula as a string (e.g., "C6H12O6").
+    /// Returns the molecular formula as a string (e.g., "C6H12O6", "C2H3O2-").
+    ///
+    /// Counts implicit hydrogens, writes C then H then the other elements
+    /// alphabetically, and appends the net charge, matching RDKit's
+    /// `CalcMolFormula`.
     pub fn formula(&self) -> String {
-        let mut counts: HashMap<&str, usize> = HashMap::new();
-        for atom in &self.atoms {
-            *counts.entry(atom.element.as_str()).or_insert(0) += 1;
+        let mut counts: HashMap<String, usize> = HashMap::new();
+        for (i, atom) in self.atoms.iter().enumerate() {
+            // Hydrogen isotopes (D, T) are written as H, like RDKit's CalcMolFormula
+            let symbol = match atom.element.as_str() {
+                "D" | "T" => "H".to_string(),
+                e => crate::descriptors::get_element(e)
+                    .map(|d| d.symbol.to_string())
+                    .unwrap_or_else(|| e.to_string()),
+            };
+            *counts.entry(symbol).or_insert(0) += 1;
+            let implicit = crate::descriptors::valence::implicit_hydrogen_count(self, i) as usize;
+            if implicit > 0 {
+                *counts.entry("H".to_string()).or_insert(0) += implicit;
+            }
         }
 
-        // Standard order: C, H, then alphabetical
+        // Order: C, H, then alphabetical (RDKit's convention)
         let mut formula = String::new();
-
-        if let Some(&c) = counts.get("C") {
-            formula.push('C');
-            if c > 1 {
-                formula.push_str(&c.to_string());
-            }
-            counts.remove("C");
-        }
-
-        if let Some(&h) = counts.get("H") {
-            formula.push('H');
-            if h > 1 {
-                formula.push_str(&h.to_string());
-            }
-            counts.remove("H");
-        }
-
-        let mut remaining: Vec<_> = counts.into_iter().collect();
-        remaining.sort_by_key(|(elem, _)| *elem);
-
-        for (elem, count) in remaining {
+        let mut push = |elem: &str, count: usize| {
             formula.push_str(elem);
             if count > 1 {
                 formula.push_str(&count.to_string());
             }
+        };
+        for first in ["C", "H"] {
+            if let Some(count) = counts.remove(first) {
+                push(first, count);
+            }
+        }
+        let mut remaining: Vec<_> = counts.into_iter().collect();
+        remaining.sort();
+        for (elem, count) in remaining {
+            push(&elem, count);
         }
 
+        let charge = self.total_charge();
+        match charge {
+            0 => {}
+            1 => formula.push('+'),
+            -1 => formula.push('-'),
+            c if c > 0 => formula.push_str(&format!("+{}", c)),
+            c => formula.push_str(&format!("-{}", -c)),
+        }
         formula
     }
 
@@ -303,7 +316,8 @@ impl Molecule {
 
     /// Calculate the molecular weight (sum of atomic weights).
     ///
-    /// Uses standard atomic weights (IUPAC 2021) for each element.
+    /// Includes implicit hydrogens and explicit isotopes; see
+    /// [`crate::descriptors::molecular_weight`].
     /// Returns `None` if any atom has an unknown element.
     ///
     /// # Example
@@ -311,10 +325,9 @@ impl Molecule {
     /// ```rust
     /// use sdfrust::{Molecule, Atom};
     ///
+    /// // Heavy-atom-only water: the two hydrogens are implicit
     /// let mut mol = Molecule::new("water");
     /// mol.atoms.push(Atom::new(0, "O", 0.0, 0.0, 0.0));
-    /// mol.atoms.push(Atom::new(1, "H", 1.0, 0.0, 0.0));
-    /// mol.atoms.push(Atom::new(2, "H", -0.3, 0.95, 0.0));
     ///
     /// let mw = mol.molecular_weight().unwrap();
     /// assert!((mw - 18.015).abs() < 0.01);

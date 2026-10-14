@@ -32,6 +32,7 @@ pub mod aromaticity;
 pub mod bond_inference;
 pub mod chirality;
 pub mod conjugation;
+mod element_table;
 pub mod elements;
 pub mod gasteiger;
 pub mod hybridization;
@@ -44,7 +45,10 @@ pub mod valence;
 pub use bond_inference::{BondInferenceConfig, infer_bonds, infer_bonds_with_config};
 
 // Re-export element data functions
-pub use elements::{ElementData, atomic_weight, covalent_radius, get_element, monoisotopic_mass};
+pub use elements::{
+    ElementData, atomic_weight, covalent_radius, element_by_atomic_number, get_element,
+    isotope_mass, monoisotopic_mass,
+};
 
 // Re-export molecular descriptor functions
 pub use molecular::{bond_type_counts, exact_mass, heavy_atom_count, molecular_weight};

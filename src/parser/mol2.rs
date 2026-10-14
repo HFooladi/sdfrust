@@ -332,6 +332,7 @@ impl<R: BufRead> Mol2Parser<R> {
             mass_difference: 0,
             isotope: None,
             partial_charge,
+            no_implicit: true,
             stereo_parity: None,
             hydrogen_count: None,
             valence: None,

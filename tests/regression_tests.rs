@@ -348,3 +348,68 @@ fn ogb_atom_features_match_ogb_reference_for_aspirin() {
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// Phase 2: implicit hydrogens and masses (values from RDKit 2025.09)
+// ---------------------------------------------------------------------------
+
+fn heavy(element: &str, charge: i8) -> Molecule {
+    let mut mol = Molecule::new(element);
+    let mut atom = Atom::new(0, element, 0.0, 0.0, 0.0);
+    atom.formal_charge = charge;
+    mol.atoms.push(atom);
+    mol
+}
+
+#[test]
+fn implicit_hydrogens_follow_charge_aware_valence() {
+    use sdfrust::descriptors::valence::implicit_hydrogen_count;
+    for (element, charge, expected) in [
+        ("C", 0, 4),
+        ("N", 1, 4),  // ammonium
+        ("O", -1, 1), // hydroxide
+        ("O", 1, 3),  // hydronium
+        ("C", 1, 3),  // methyl cation
+        ("C", -1, 3), // methyl anion
+        ("B", -1, 4), // borohydride
+        ("Fe", 2, 0), // metals take no implicit H
+        ("Cl", -1, 0),
+    ] {
+        assert_eq!(
+            implicit_hydrogen_count(&heavy(element, charge), 0),
+            expected,
+            "{element}{charge:+}"
+        );
+    }
+}
+
+#[test]
+fn methyl_radical_from_molfile_keeps_three_hydrogens() {
+    // As written by RDKit for [CH3]: valence field 3 and M  RAD doublet
+    let block = "\n     RDKit          2D\n\n  1  0  0  0  0  0  0  0  0  0999 V2000\n    0.0000    0.0000    0.0000 C   0  0  0  0  0  3  0  0  0  0  0  0\nM  RAD  1   1   2\nM  END\n";
+    let mol = parse_sdf_string(block).unwrap();
+    assert_eq!(mol.formula(), "CH3");
+}
+
+#[test]
+fn masses_and_formula_include_implicit_h_isotopes_and_charge() {
+    // Acetate, heavy atoms only: C2H3O2-
+    let mut mol = carbon_chain(2);
+    mol.atoms.push(Atom::new(2, "O", 0.0, 1.0, 0.0));
+    mol.atoms.push(Atom::new(3, "O", 0.0, -1.0, 0.0));
+    mol.atoms[3].formal_charge = -1;
+    mol.bonds.push(Bond::new(1, 2, BondOrder::Double));
+    mol.bonds.push(Bond::new(1, 3, BondOrder::Single));
+    assert_eq!(mol.formula(), "C2H3O2-");
+    assert!((mol.molecular_weight().unwrap() - 59.044).abs() < 1e-3);
+    assert!((mol.exact_mass().unwrap() - 59.013853).abs() < 1e-5);
+
+    // 13CH4 uses the isotope mass
+    let mut c13 = heavy("C", 0);
+    c13.atoms[0].isotope = Some(13);
+    assert!((c13.molecular_weight().unwrap() - 17.0354).abs() < 1e-3);
+    assert_eq!(c13.formula(), "CH4");
+
+    // Uranium is now a known element
+    assert!(heavy("U", 0).molecular_weight().is_some());
+}

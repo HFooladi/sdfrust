@@ -9,43 +9,78 @@ use crate::bond::BondOrder;
 use crate::molecule::Molecule;
 
 use super::elements;
+use super::valence::implicit_hydrogen_count;
 
-/// Calculate the molecular weight (sum of atomic weights).
+/// Mass of an electron in unified atomic mass units.
+const ELECTRON_MASS: f64 = 0.000_548_579_909;
+
+/// Sums a per-atom mass over the molecule, including implicit hydrogens.
 ///
-/// Uses standard atomic weights (IUPAC 2021) for each element.
+/// `mass_of(element, isotope)` returns the mass for one explicit atom.
+fn sum_masses(
+    mol: &Molecule,
+    mass_of: impl Fn(&elements::ElementData, Option<u16>) -> f64,
+) -> Option<f64> {
+    let hydrogen = elements::get_element("H")?;
+    let mut total = 0.0;
+    for (i, atom) in mol.atoms.iter().enumerate() {
+        let element = elements::get_element(&atom.element)?;
+        total += mass_of(element, atom.isotope);
+        total += implicit_hydrogen_count(mol, i) as f64 * mass_of(hydrogen, None);
+    }
+    Some(total)
+}
+
+/// Mass of a specific isotope, falling back to its mass number if unknown.
+fn isotope_or_number(element: &elements::ElementData, mass_number: u16) -> f64 {
+    elements::isotope_mass(element.atomic_number, mass_number).unwrap_or(mass_number as f64)
+}
+
+/// Calculate the molecular weight (average mass).
+///
+/// Sums standard atomic weights over all atoms, including implicit hydrogens
+/// (so heavy-atom-only files give the full molecular weight). Atoms with an
+/// explicit isotope use that isotope's mass. Matches RDKit's `MolWt`.
 /// Returns `None` if any atom has an unknown element.
 ///
 /// # Example
 ///
 /// ```rust
-/// use sdfrust::{Molecule, Atom, descriptors};
+/// use sdfrust::{Molecule, Atom, Bond, BondOrder, descriptors};
 ///
 /// let mut mol = Molecule::new("water");
 /// mol.atoms.push(Atom::new(0, "O", 0.0, 0.0, 0.0));
 /// mol.atoms.push(Atom::new(1, "H", 1.0, 0.0, 0.0));
 /// mol.atoms.push(Atom::new(2, "H", -0.3, 0.95, 0.0));
+/// mol.bonds.push(Bond::new(0, 1, BondOrder::Single));
+/// mol.bonds.push(Bond::new(0, 2, BondOrder::Single));
 ///
 /// let mw = descriptors::molecular_weight(&mol).unwrap();
 /// assert!((mw - 18.015).abs() < 0.01);  // H2O ≈ 18.015 Da
+///
+/// // Implicit hydrogens are included: a lone O is water
+/// let mut o = Molecule::new("water_heavy");
+/// o.atoms.push(Atom::new(0, "O", 0.0, 0.0, 0.0));
+/// assert!((descriptors::molecular_weight(&o).unwrap() - 18.015).abs() < 0.01);
 /// ```
 pub fn molecular_weight(mol: &Molecule) -> Option<f64> {
-    let mut total = 0.0;
-    for atom in &mol.atoms {
-        let weight = elements::atomic_weight(&atom.element)?;
-        total += weight;
-    }
-    Some(total)
+    sum_masses(mol, |element, isotope| match isotope {
+        Some(a) => isotope_or_number(element, a),
+        None => element.atomic_weight,
+    })
 }
 
 /// Calculate the exact (monoisotopic) mass.
 ///
-/// Uses the mass of the most abundant isotope for each element.
+/// Uses the most abundant isotope of each element (or the atom's explicit
+/// isotope), includes implicit hydrogens, and corrects for the electrons
+/// gained or lost by charged species. Matches RDKit's `ExactMolWt`.
 /// Returns `None` if any atom has an unknown element.
 ///
 /// # Example
 ///
 /// ```rust
-/// use sdfrust::{Molecule, Atom, descriptors};
+/// use sdfrust::{Molecule, Atom, Bond, BondOrder, descriptors};
 ///
 /// let mut mol = Molecule::new("methane");
 /// mol.atoms.push(Atom::new(0, "C", 0.0, 0.0, 0.0));
@@ -53,18 +88,20 @@ pub fn molecular_weight(mol: &Molecule) -> Option<f64> {
 /// mol.atoms.push(Atom::new(2, "H", -1.0, 0.0, 0.0));
 /// mol.atoms.push(Atom::new(3, "H", 0.0, 1.0, 0.0));
 /// mol.atoms.push(Atom::new(4, "H", 0.0, -1.0, 0.0));
+/// for h in 1..=4 {
+///     mol.bonds.push(Bond::new(0, h, BondOrder::Single));
+/// }
 ///
 /// let mass = descriptors::exact_mass(&mol).unwrap();
 /// // CH4: 12.0 + 4*1.00783 ≈ 16.031
 /// assert!((mass - 16.031).abs() < 0.01);
 /// ```
 pub fn exact_mass(mol: &Molecule) -> Option<f64> {
-    let mut total = 0.0;
-    for atom in &mol.atoms {
-        let mass = elements::monoisotopic_mass(&atom.element)?;
-        total += mass;
-    }
-    Some(total)
+    let neutral = sum_masses(mol, |element, isotope| match isotope {
+        Some(a) => isotope_or_number(element, a),
+        None => element.monoisotopic_mass,
+    })?;
+    Some(neutral - mol.total_charge() as f64 * ELECTRON_MASS)
 }
 
 /// Count non-hydrogen atoms (heavy atoms).

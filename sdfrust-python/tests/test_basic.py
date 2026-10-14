@@ -127,6 +127,14 @@ class TestMolecule:
         mol.add_atom(sdfrust.Atom(0, "O", 0.0, 0.0, 0.0))
         mol.add_atom(sdfrust.Atom(1, "H", 0.96, 0.0, 0.0))
         mol.add_atom(sdfrust.Atom(2, "H", -0.24, 0.93, 0.0))
+        mol.add_bond(sdfrust.Bond(0, 1, sdfrust.BondOrder.single()))
+        mol.add_bond(sdfrust.Bond(0, 2, sdfrust.BondOrder.single()))
+        assert mol.formula() == "H2O"
+
+    def test_formula_counts_implicit_hydrogens(self):
+        """Heavy-atom-only structures get implicit H, as in RDKit."""
+        mol = sdfrust.Molecule("water")
+        mol.add_atom(sdfrust.Atom(0, "O", 0.0, 0.0, 0.0))
         assert mol.formula() == "H2O"
 
     def test_properties(self):
@@ -376,6 +384,8 @@ class TestDescriptors:
         mol.add_atom(sdfrust.Atom(0, "O", 0.0, 0.0, 0.0))
         mol.add_atom(sdfrust.Atom(1, "H", 0.96, 0.0, 0.0))
         mol.add_atom(sdfrust.Atom(2, "H", -0.24, 0.93, 0.0))
+        mol.add_bond(sdfrust.Bond(0, 1, sdfrust.BondOrder.single()))
+        mol.add_bond(sdfrust.Bond(0, 2, sdfrust.BondOrder.single()))
 
         mw = mol.molecular_weight()
         assert mw is not None

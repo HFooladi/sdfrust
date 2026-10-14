@@ -80,6 +80,8 @@ fn test_molecular_weight_water() {
     mol.atoms.push(Atom::new(0, "O", 0.0, 0.0, 0.0));
     mol.atoms.push(Atom::new(1, "H", 0.96, 0.0, 0.0));
     mol.atoms.push(Atom::new(2, "H", -0.24, 0.93, 0.0));
+    mol.bonds.push(Bond::new(0, 1, BondOrder::Single));
+    mol.bonds.push(Bond::new(0, 2, BondOrder::Single));
 
     let mw = molecular_weight(&mol).unwrap();
     // H2O: 2*1.008 + 15.999 = 18.015
@@ -94,6 +96,9 @@ fn test_molecular_weight_methane() {
     mol.atoms.push(Atom::new(2, "H", -0.63, -0.63, 0.63));
     mol.atoms.push(Atom::new(3, "H", -0.63, 0.63, -0.63));
     mol.atoms.push(Atom::new(4, "H", 0.63, -0.63, -0.63));
+    for h in 1..=4 {
+        mol.bonds.push(Bond::new(0, h, BondOrder::Single));
+    }
 
     let mw = molecular_weight(&mol).unwrap();
     // CH4: 12.011 + 4*1.008 = 16.043
@@ -156,6 +161,8 @@ fn test_exact_mass_water() {
     mol.atoms.push(Atom::new(0, "O", 0.0, 0.0, 0.0));
     mol.atoms.push(Atom::new(1, "H", 0.96, 0.0, 0.0));
     mol.atoms.push(Atom::new(2, "H", -0.24, 0.93, 0.0));
+    mol.bonds.push(Bond::new(0, 1, BondOrder::Single));
+    mol.bonds.push(Bond::new(0, 2, BondOrder::Single));
 
     let mass = exact_mass(&mol).unwrap();
     // H2O: 2*1.00783 + 15.99491 = 18.01056
@@ -634,8 +641,9 @@ fn test_descriptors_single_atom() {
     let mut mol = Molecule::new("carbon");
     mol.atoms.push(Atom::new(0, "C", 0.0, 0.0, 0.0));
 
-    assert!((molecular_weight(&mol).unwrap() - 12.011).abs() < 0.001);
-    assert!((exact_mass(&mol).unwrap() - 12.0).abs() < 0.001);
+    // A lone carbon is methane once implicit hydrogens are counted (RDKit agrees)
+    assert!((molecular_weight(&mol).unwrap() - 16.043).abs() < 0.001);
+    assert!((exact_mass(&mol).unwrap() - 16.0313).abs() < 0.001);
     assert_eq!(heavy_atom_count(&mol), 1);
     assert_eq!(ring_count(&mol), 0);
     assert_eq!(rotatable_bond_count(&mol), 0);
@@ -652,10 +660,10 @@ fn test_descriptors_disconnected_fragments() {
     // Fragment 2: O (isolated)
     mol.atoms.push(Atom::new(2, "O", 5.0, 0.0, 0.0));
 
-    // MW should include all atoms
+    // MW should include all fragments with their implicit hydrogens:
+    // ethane (30.070) + water (18.015)
     let mw = molecular_weight(&mol).unwrap();
-    // 2*12.011 + 15.999 = 40.021
-    assert!((mw - 40.021).abs() < 0.001);
+    assert!((mw - 48.085).abs() < 0.001, "got {}", mw);
 
     // Heavy atom count should be 3
     assert_eq!(heavy_atom_count(&mol), 3);
@@ -670,6 +678,8 @@ fn test_descriptors_with_deuterium() {
     mol.atoms.push(Atom::new(0, "O", 0.0, 0.0, 0.0));
     mol.atoms.push(Atom::new(1, "D", 0.96, 0.0, 0.0));
     mol.atoms.push(Atom::new(2, "D", -0.24, 0.93, 0.0));
+    mol.bonds.push(Bond::new(0, 1, BondOrder::Single));
+    mol.bonds.push(Bond::new(0, 2, BondOrder::Single));
 
     let mw = molecular_weight(&mol).unwrap();
     // D2O: 2*2.014 + 15.999 ≈ 20.027
