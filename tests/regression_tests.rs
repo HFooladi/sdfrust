@@ -566,3 +566,93 @@ fn azulene_fusion_bond_is_not_aromatic() {
     assert!(!bonds[3], "fusion bond 3-4");
     assert_eq!(bonds.iter().filter(|&&b| b).count(), 10);
 }
+
+// ---------------------------------------------------------------------------
+// Phase 2: hybridization and conjugation (RDKit's results as reference)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn hybridization_matches_rdkit_for_former_failures() {
+    use sdfrust::descriptors::Hybridization::*;
+    use sdfrust::descriptors::all_hybridizations;
+    let hyb = |mol: &Molecule, i: usize| all_hybridizations(mol)[i];
+
+    // Allene C=C=C: central carbon is SP
+    let allene = kekule(&["C", "C", "C"], &[(0, 1, 2), (1, 2, 2)]);
+    assert_eq!(hyb(&allene, 1), SP);
+
+    // Methyl azide C-N=[N+]=[N-]: central N is SP
+    let mut azide = kekule(&["C", "N", "N", "N"], &[(0, 1, 1), (1, 2, 2), (2, 3, 2)]);
+    azide.atoms[2].formal_charge = 1;
+    azide.atoms[3].formal_charge = -1;
+    assert_eq!(hyb(&azide, 2), SP);
+
+    // Dimethyl sulfone and DMSO: S is SP3
+    let sulfone = kekule(
+        &["C", "S", "C", "O", "O"],
+        &[(0, 1, 1), (1, 2, 1), (1, 3, 2), (1, 4, 2)],
+    );
+    assert_eq!(hyb(&sulfone, 1), SP3);
+    let dmso = kekule(&["C", "S", "C", "O"], &[(0, 1, 1), (1, 2, 1), (1, 3, 2)]);
+    assert_eq!(hyb(&dmso, 1), SP3);
+
+    // Acetamide: amide N is SP2 (conjugated lone pair); methyl C is SP3
+    let amide = kekule(&["C", "C", "O", "N"], &[(0, 1, 1), (1, 2, 2), (1, 3, 1)]);
+    assert_eq!(hyb(&amide, 3), SP2);
+    assert_eq!(hyb(&amide, 0), SP3);
+
+    // Methyl cation is SP2; isolated carbon (methane) is SP3; boronic B is SP2
+    let mut cation = heavy("C", 1);
+    cation.atoms[0].formal_charge = 1;
+    assert_eq!(hyb(&cation, 0), SP2);
+    assert_eq!(hyb(&heavy("C", 0), 0), SP3);
+    let boronic = kekule(&["C", "B", "O", "O"], &[(0, 1, 1), (1, 2, 1), (1, 3, 1)]);
+    assert_eq!(hyb(&boronic, 1), SP2);
+
+    // atom_hybridization agrees with all_hybridizations
+    for i in 0..amide.atom_count() {
+        assert_eq!(
+            sdfrust::descriptors::atom_hybridization(&amide, i),
+            hyb(&amide, i)
+        );
+    }
+}
+
+#[test]
+fn conjugation_matches_rdkit_for_former_failures() {
+    use sdfrust::descriptors::all_conjugated_bonds;
+    let benzene_ring = [
+        (0, 1, 2),
+        (1, 2, 1),
+        (2, 3, 2),
+        (3, 4, 1),
+        (4, 5, 2),
+        (5, 0, 1),
+    ];
+
+    // Benzonitrile: the ring-C≡N single bond is conjugated
+    let mut bonds = benzene_ring.to_vec();
+    bonds.extend([(0, 6, 1), (6, 7, 3)]);
+    let benzonitrile = kekule(&["C", "C", "C", "C", "C", "C", "C", "N"], &bonds);
+    assert!(all_conjugated_bonds(&benzonitrile)[6]);
+
+    // Anilinium: the ring-N+ bond is not conjugated
+    let mut bonds = benzene_ring.to_vec();
+    bonds.push((0, 6, 1));
+    let mut anilinium = kekule(&["C", "C", "C", "C", "C", "C", "N"], &bonds);
+    anilinium.atoms[6].formal_charge = 1;
+    assert!(!all_conjugated_bonds(&anilinium)[6]);
+
+    // Thiophenol: the ring-SH bond is not conjugated, phenol's ring-OH is
+    let thiophenol = kekule(&["C", "C", "C", "C", "C", "C", "S"], &bonds);
+    assert!(!all_conjugated_bonds(&thiophenol)[6]);
+    let phenol = kekule(&["C", "C", "C", "C", "C", "C", "O"], &bonds);
+    assert!(all_conjugated_bonds(&phenol)[6]);
+
+    // Dimethyl sulfone: nothing is conjugated
+    let sulfone = kekule(
+        &["C", "S", "C", "O", "O"],
+        &[(0, 1, 1), (1, 2, 1), (1, 3, 2), (1, 4, 2)],
+    );
+    assert!(all_conjugated_bonds(&sulfone).iter().all(|&c| !c));
+}

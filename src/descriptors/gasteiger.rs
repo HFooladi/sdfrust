@@ -24,7 +24,7 @@
 //! assert!(charges[1] > 0.0);
 //! ```
 
-use crate::descriptors::hybridization::{Hybridization, atom_hybridization};
+use crate::descriptors::hybridization::{Hybridization, all_hybridizations};
 use crate::graph::AdjacencyList;
 use crate::molecule::Molecule;
 
@@ -243,11 +243,9 @@ pub fn gasteiger_charges_with_params(mol: &Molecule, max_iter: usize, damping: f
     let adj = AdjacencyList::from_molecule(mol);
 
     // Get electronegativity parameters for each atom
+    let hybridizations = all_hybridizations(mol);
     let params: Vec<Option<ElectronegativityParams>> = (0..n)
-        .map(|i| {
-            let hyb = atom_hybridization(mol, i);
-            get_params(&mol.atoms[i].element, hyb)
-        })
+        .map(|i| get_params(&mol.atoms[i].element, hybridizations[i]))
         .collect();
 
     // Initialize charges from formal charges

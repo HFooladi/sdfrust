@@ -265,6 +265,17 @@ fn is_potential_stereocenter(
         return false;
     }
 
+    // A carbon with a double or triple bond cannot be a tetrahedral center
+    // (guards against over-valent input that still counts as SP3)
+    if elem == "C"
+        && adj
+            .neighbors(idx)
+            .iter()
+            .any(|&(_, b)| matches!(mol.bonds[b].order, BondOrder::Double | BondOrder::Triple))
+    {
+        return false;
+    }
+
     // Must have exactly 4 substituents (explicit + implicit H)
     let explicit = adj.degree(idx);
     let impl_h = implicit_hydrogen_count(mol, idx);
@@ -500,8 +511,10 @@ pub fn all_chiralities(mol: &Molecule) -> Vec<ChiralTag> {
         }
 
         // Collect substituents with CIP priorities for stereocenter detection
-        let mut explicit_neighbors = adj.neighbor_atoms(i);
-        explicit_neighbors.sort_unstable(); // canonical atom index order
+        // Neighbours in bond order: RDKit's CW/CCW is relative to the order of
+        // the atom's bonds in the molecule (for SMILES-derived files this is
+        // usually also atom-index order).
+        let explicit_neighbors = adj.neighbor_atoms(i);
         let impl_h = implicit_hydrogen_count(mol, i);
 
         let mut sub_priorities: Vec<(CipPriority, usize)> = Vec::with_capacity(4);
@@ -532,16 +545,15 @@ pub fn all_chiralities(mol: &Molecule) -> Vec<ChiralTag> {
         }
 
         // Get positions for signed volume calculation.
-        // RDKit's CW/CCW is based on ATOM INDEX order (not CIP priority order).
-        // Explicit neighbors are already sorted by atom index.
-        // Implicit H goes last (highest virtual index).
+        // RDKit's CW/CCW is based on bond order (not CIP priority order).
+        // Implicit H goes last.
         let center_pos = if mol_is_2d {
             (mol.atoms[i].x, mol.atoms[i].y, 0.0)
         } else {
             (mol.atoms[i].x, mol.atoms[i].y, mol.atoms[i].z)
         };
 
-        // Build ordered neighbor list: explicit (by atom index) + implicit H last
+        // Build ordered neighbor list: explicit (bond order) + implicit H last
         let ordered_neighbors: Vec<usize> = {
             let mut v: Vec<usize> = explicit_neighbors.clone();
             for _ in 0..impl_h {
