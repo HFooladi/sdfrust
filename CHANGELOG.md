@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.8.0] - Unreleased
+## [0.8.0] - 2026-10-14
 
 Chemistry correctness release. Every perceived property was compared against
 RDKit 2025.09 and the `ogb` package on 4,553 molecules (NCI first 5k, EGFR and
@@ -80,12 +80,21 @@ files still parse.
 - `compare_tools.py --rdkit-data/--smiles/--extra` for larger corpora, and
   exact ECFP bit comparison.
 
+### Packaging
+
+- Python wheels include the `geometry` feature (RMSD, transforms, neighbor
+  lists, angles), so the documented geometry API works from PyPI.
+- macOS and Windows wheels are built for Python 3.9–3.13; 0.6.0 shipped only
+  3.12 wheels on those platforms.
+
 ### Fixed
 
 - The V2000 parser and writer handle stereo code 3 ("cis/trans unknown") on
   double bonds.
 
-## [0.7.0] - Unreleased
+## [0.7.0] - not published
+
+These changes were never released separately; they ship in 0.8.0.
 
 Correctness release. Every change below was found by a differential comparison
 against RDKit 2025.09, OpenBabel 3.1 and the `ogb` package
@@ -224,7 +233,8 @@ against RDKit 2025.09, OpenBabel 3.1 and the `ogb` package
 - Molecule methods: `formula()`, `centroid()`, `translate()`, `neighbors()`, `element_counts()`
 - Memory-efficient streaming iterator for large multi-molecule files
 
-[Unreleased]: https://github.com/HFooladi/sdfrust/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/HFooladi/sdfrust/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/HFooladi/sdfrust/compare/v0.6.0...v0.8.0
 [0.6.0]: https://github.com/HFooladi/sdfrust/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/HFooladi/sdfrust/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/HFooladi/sdfrust/compare/v0.3.0...v0.4.0

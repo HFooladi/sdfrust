@@ -39,7 +39,7 @@ jobs:
         working-directory: sdfrust-python
         run: |
           source .venv/bin/activate
-          maturin develop --features numpy,gzip
+          maturin develop --features numpy,gzip,geometry
       - name: Run tests
         working-directory: sdfrust-python
         run: |
@@ -62,24 +62,30 @@ jobs:
             interpreters: -i 3.9 3.10 3.11 3.12 3.13
           - os: macos-latest
             target: x86_64
-            interpreters: ""
+            interpreters: -i 3.9 3.10 3.11 3.12 3.13
           - os: macos-latest
             target: aarch64
-            interpreters: ""
+            interpreters: -i 3.9 3.10 3.11 3.12 3.13
           - os: windows-latest
             target: x86_64
-            interpreters: ""
+            interpreters: -i 3.9 3.10 3.11 3.12 3.13
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          # macOS/Windows builds need every target interpreter installed
+          python-version: |
+            3.9
+            3.10
+            3.11
+            3.12
+            3.13
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.target }}
-          args: --release --out dist ${{ matrix.interpreters }} --manifest-path sdfrust-python/Cargo.toml --features numpy,gzip
+          args: --release --out dist ${{ matrix.interpreters }} --manifest-path sdfrust-python/Cargo.toml --features numpy,gzip,geometry
           manylinux: auto
       - name: Upload wheels
         uses: actions/upload-artifact@v4

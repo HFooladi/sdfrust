@@ -38,6 +38,6 @@ Repository = "https://github.com/hfooladi/sdfrust"
 Documentation = "https://github.com/hfooladi/sdfrust#readme"
 
 [tool.maturin]
-features = ["pyo3/extension-module", "numpy", "gzip"]
+features = ["pyo3/extension-module", "numpy", "gzip", "geometry"]
 python-source = "python"
 module-name = "sdfrust._sdfrust"
