@@ -33,6 +33,10 @@ pub fn convert_error(err: SdfError) -> PyErr {
             PyValueError::new_err(format!("Missing required section: {}", section))
         }
         SdfError::EmptyFile => PyValueError::new_err("Empty file"),
+        SdfError::Unwritable(reason) => PyValueError::new_err(format!(
+            "Molecule cannot be written in this format: {}",
+            reason
+        )),
         SdfError::InvalidCoordinate(coord) => {
             PyValueError::new_err(format!("Invalid coordinate value: {}", coord))
         }

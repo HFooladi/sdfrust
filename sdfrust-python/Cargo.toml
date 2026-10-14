@@ -1,9 +1,9 @@
 [package]
 name = "sdfrust-python"
-version = "0.6.0"
+version = "0.7.0"
 edition = "2021"
 rust-version = "1.70"
-authors = ["Hosein Fooladi"]
+authors = ["Hosein Fooladi <fooladi.hosein@gmail.com>"]
 description = "Python bindings for sdfrust - a fast SDF, MOL2, and XYZ parser"
 license = "MIT"
 repository = "https://github.com/hfooladi/sdfrust"

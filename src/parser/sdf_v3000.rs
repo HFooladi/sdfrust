@@ -25,6 +25,8 @@ pub struct SdfV3000Parser<R> {
     line_number: usize,
     current_line: String,
     peeked_line: Option<String>,
+    /// True once the `$$$$` terminator of the current record has been consumed.
+    record_ended: bool,
 }
 
 impl<R: BufRead> SdfV3000Parser<R> {
@@ -35,6 +37,7 @@ impl<R: BufRead> SdfV3000Parser<R> {
             line_number: 0,
             current_line: String::new(),
             peeked_line: None,
+            record_ended: false,
         }
     }
 
@@ -46,16 +49,18 @@ impl<R: BufRead> SdfV3000Parser<R> {
         }
 
         self.current_line.clear();
-        let bytes_read = self.reader.read_line(&mut self.current_line)?;
+        let mut raw = Vec::new();
+        let bytes_read = self.reader.read_until(b'\n', &mut raw)?;
         if bytes_read > 0 {
             self.line_number += 1;
-            // Remove trailing newline
-            if self.current_line.ends_with('\n') {
-                self.current_line.pop();
-                if self.current_line.ends_with('\r') {
-                    self.current_line.pop();
-                }
+            if raw.ends_with(b"\n") {
+                raw.pop();
             }
+            if raw.ends_with(b"\r") {
+                raw.pop();
+            }
+            // Invalid UTF-8 (e.g. Latin-1 property values) is replaced, not fatal.
+            self.current_line.push_str(&String::from_utf8_lossy(&raw));
             Ok(true)
         } else {
             Ok(false)
@@ -138,11 +143,7 @@ impl<R: BufRead> SdfV3000Parser<R> {
         let mut sgroups = Vec::new();
         let mut collections = Vec::new();
 
-        loop {
-            let Some(line) = self.read_v30_line()? else {
-                break;
-            };
-
+        while let Some(line) = self.read_v30_line()? {
             if line.starts_with("END CTAB") {
                 break;
             } else if line.starts_with("BEGIN SGROUP") {
@@ -220,8 +221,9 @@ impl<R: BufRead> SdfV3000Parser<R> {
             )));
         }
 
-        let mut atoms = Vec::with_capacity(count);
-        let mut id_to_index: HashMap<u32, usize> = HashMap::with_capacity(count);
+        let prealloc = count.min(super::sdf::MAX_PREALLOC);
+        let mut atoms = Vec::with_capacity(prealloc);
+        let mut id_to_index: HashMap<u32, usize> = HashMap::with_capacity(prealloc);
 
         for i in 0..count {
             let atom_line = self.read_v30_line()?.ok_or(SdfError::AtomCountMismatch {
@@ -302,7 +304,7 @@ impl<R: BufRead> SdfV3000Parser<R> {
 
         // Parse key=value pairs
         let mut formal_charge: i8 = 0;
-        let mut mass_difference: i8 = 0;
+        let mut isotope: Option<u16> = None;
         let mut radical: Option<u8> = None;
         let mut valence: Option<u8> = None;
         let mut hydrogen_count: Option<u8> = None;
@@ -319,7 +321,12 @@ impl<R: BufRead> SdfV3000Parser<R> {
                         radical = value.parse().ok();
                     }
                     "MASS" => {
-                        mass_difference = value.parse().unwrap_or(0);
+                        // Absolute isotope mass; may be written with decimals
+                        isotope = value
+                            .parse::<f64>()
+                            .ok()
+                            .filter(|m| *m >= 1.0 && *m < 65536.0)
+                            .map(|m| m.round() as u16);
                     }
                     "VAL" => {
                         valence = value.parse().ok();
@@ -330,14 +337,12 @@ impl<R: BufRead> SdfV3000Parser<R> {
                     "CFG" => {
                         stereo_parity = value.parse().ok();
                     }
-                    "RGROUPS" => {
-                        // Parse R-group attachment, format: (n rg1 rg2...)
-                        if value.starts_with('(') && value.ends_with(')') {
-                            let inner = &value[1..value.len() - 1];
-                            let nums: Vec<&str> = inner.split_whitespace().collect();
-                            if nums.len() >= 2 {
-                                rgroup_label = nums[1].parse().ok();
-                            }
+                    // Parse R-group attachment, format: (n rg1 rg2...)
+                    "RGROUPS" if value.starts_with('(') && value.ends_with(')') => {
+                        let inner = &value[1..value.len() - 1];
+                        let nums: Vec<&str> = inner.split_whitespace().collect();
+                        if nums.len() >= 2 {
+                            rgroup_label = nums[1].parse().ok();
                         }
                     }
                     _ => {} // Ignore unknown keys
@@ -352,7 +357,9 @@ impl<R: BufRead> SdfV3000Parser<R> {
             y,
             z,
             formal_charge,
-            mass_difference,
+            mass_difference: 0,
+            isotope,
+            partial_charge: None,
             stereo_parity,
             hydrogen_count,
             valence,
@@ -510,11 +517,7 @@ impl<R: BufRead> SdfV3000Parser<R> {
     fn parse_sgroup_block(&mut self, id_to_index: &HashMap<u32, usize>) -> Result<Vec<SGroup>> {
         let mut sgroups = Vec::new();
 
-        loop {
-            let Some(line) = self.read_v30_line()? else {
-                break;
-            };
-
+        while let Some(line) = self.read_v30_line()? {
             if line.starts_with("END SGROUP") {
                 break;
             }
@@ -601,11 +604,7 @@ impl<R: BufRead> SdfV3000Parser<R> {
         let mut collections = Vec::new();
         let mut current_id: u32 = 0;
 
-        loop {
-            let Some(line) = self.read_v30_line()? else {
-                break;
-            };
-
+        while let Some(line) = self.read_v30_line()? {
             if line.starts_with("END COLLECTION") {
                 break;
             }
@@ -674,11 +673,7 @@ impl<R: BufRead> SdfV3000Parser<R> {
     ) -> Result<Vec<StereoGroup>> {
         let mut stereogroups = Vec::new();
 
-        loop {
-            let Some(line) = self.read_v30_line()? else {
-                break;
-            };
-
+        while let Some(line) = self.read_v30_line()? {
             if line.starts_with("END STEREO") {
                 break;
             }
@@ -746,11 +741,30 @@ impl<R: BufRead> SdfV3000Parser<R> {
             if !self.read_line()? {
                 break;
             }
-            if self.current_line.starts_with("M  END") || self.current_line.starts_with("$$$$") {
+            if self.current_line.starts_with("M  END") {
+                break;
+            }
+            if self.current_line.starts_with("$$$$") {
+                self.record_ended = true;
                 break;
             }
         }
         Ok(())
+    }
+
+    /// Skips the rest of the current record (up to and including `$$$$`).
+    /// Returns `false` if the end of input was reached.
+    pub fn skip_to_record_end(&mut self) -> Result<bool> {
+        if self.record_ended {
+            return Ok(true);
+        }
+        while self.read_line()? {
+            if self.current_line.starts_with("$$$$") {
+                self.record_ended = true;
+                return Ok(true);
+            }
+        }
+        Ok(false)
     }
 
     /// Parses data block properties after M  END until $$$$.
@@ -759,20 +773,22 @@ impl<R: BufRead> SdfV3000Parser<R> {
         let mut current_property_name: Option<String> = None;
         let mut current_property_value = String::new();
 
+        if self.record_ended {
+            // The record ended without M  END; there is no data block.
+            return Ok(properties);
+        }
+
         loop {
             if !self.read_line()? {
                 break;
             }
 
             if self.current_line.starts_with("$$$$") {
-                // Save any pending property
-                if let Some(prop_name) = current_property_name.take() {
-                    properties.insert(prop_name, current_property_value.trim().to_string());
-                }
+                self.record_ended = true;
                 break;
             }
 
-            if self.current_line.starts_with("> ") || self.current_line.starts_with(">  ") {
+            if self.current_line.starts_with('>') && self.current_line.contains('<') {
                 // Save previous property if exists
                 if let Some(prop_name) = current_property_name.take() {
                     properties.insert(prop_name, current_property_value.trim().to_string());
@@ -786,13 +802,22 @@ impl<R: BufRead> SdfV3000Parser<R> {
                         current_property_name = Some(prop_name);
                     }
                 }
-            } else if current_property_name.is_some() && !self.current_line.is_empty() {
+            } else if self.current_line.is_empty() {
+                // A blank line terminates the current data item.
+                if let Some(prop_name) = current_property_name.take() {
+                    properties.insert(prop_name, current_property_value.trim().to_string());
+                }
+                current_property_value.clear();
+            } else if current_property_name.is_some() {
                 // Accumulate property value
                 if !current_property_value.is_empty() {
                     current_property_value.push('\n');
                 }
                 current_property_value.push_str(&self.current_line);
             }
+        }
+        if let Some(prop_name) = current_property_name.take() {
+            properties.insert(prop_name, current_property_value.trim().to_string());
         }
 
         Ok(properties)
@@ -819,16 +844,30 @@ impl<R: BufRead> SdfV3000Iterator<R> {
 
     /// Parses the header (first 4 lines) and returns molecule info.
     fn parse_header(&mut self) -> Result<Option<MolHeader>> {
+        self.parser.record_ended = false;
+
         // Line 1: Molecule name
         if !self.parser.read_line()? {
             return Ok(None);
         }
         let name = self.parser.current_line.trim().to_string();
 
+        // Whitespace-only lines at the end of a file (e.g. after the last $$$$)
+        // are not a record.
+        let mut only_blank = name.is_empty();
+        let eof = |only_blank: bool, what: &str| {
+            if only_blank {
+                Ok(None)
+            } else {
+                Err(SdfError::MissingSection(what.to_string()))
+            }
+        };
+
         // Line 2: Program/timestamp line
         if !self.parser.read_line()? {
-            return Err(SdfError::MissingSection("header".to_string()));
+            return eof(only_blank, "header");
         }
+        only_blank &= self.parser.current_line.trim().is_empty();
         let program_line = if self.parser.current_line.trim().is_empty() {
             None
         } else {
@@ -837,8 +876,9 @@ impl<R: BufRead> SdfV3000Iterator<R> {
 
         // Line 3: Comment
         if !self.parser.read_line()? {
-            return Err(SdfError::MissingSection("header".to_string()));
+            return eof(only_blank, "header");
         }
+        only_blank &= self.parser.current_line.trim().is_empty();
         let comment = if self.parser.current_line.trim().is_empty() {
             None
         } else {
@@ -847,7 +887,17 @@ impl<R: BufRead> SdfV3000Iterator<R> {
 
         // Line 4: Counts line (should indicate V3000)
         if !self.parser.read_line()? {
-            return Err(SdfError::MissingSection("counts line".to_string()));
+            return eof(only_blank, "counts line");
+        }
+        if only_blank && self.parser.current_line.trim().is_empty() {
+            while self.parser.read_line()? {
+                if !self.parser.current_line.trim().is_empty() {
+                    return Err(SdfError::InvalidV3000Block(
+                        "Expected V3000 in counts line".to_string(),
+                    ));
+                }
+            }
+            return Ok(None);
         }
 
         // V3000 counts line: "  0  0  0     0  0            999 V3000"
@@ -861,42 +911,41 @@ impl<R: BufRead> SdfV3000Iterator<R> {
     }
 }
 
+impl<R: BufRead> SdfV3000Iterator<R> {
+    fn parse_next(&mut self) -> Result<Option<Molecule>> {
+        let Some((name, program_line, comment)) = self.parse_header()? else {
+            return Ok(None);
+        };
+        let mut mol = self
+            .parser
+            .parse_molecule_body(name, program_line, comment)?;
+        mol.properties = self.parser.parse_properties()?;
+        Ok(Some(mol))
+    }
+}
+
 impl<R: BufRead> Iterator for SdfV3000Iterator<R> {
     type Item = Result<Molecule>;
 
+    /// A malformed record yields `Some(Err(_))`; iteration then resumes after
+    /// the record's `$$$$` terminator.
     fn next(&mut self) -> Option<Self::Item> {
         if self.finished {
             return None;
         }
 
-        match self.parse_header() {
-            Ok(Some((name, program_line, comment))) => {
-                match self.parser.parse_molecule_body(name, program_line, comment) {
-                    Ok(mut mol) => {
-                        // Parse properties
-                        match self.parser.parse_properties() {
-                            Ok(props) => {
-                                mol.properties = props;
-                                Some(Ok(mol))
-                            }
-                            Err(e) => {
-                                self.finished = true;
-                                Some(Err(e))
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        self.finished = true;
-                        Some(Err(e))
-                    }
-                }
-            }
+        match self.parse_next() {
+            Ok(Some(mol)) => Some(Ok(mol)),
             Ok(None) => {
                 self.finished = true;
                 None
             }
             Err(e) => {
-                self.finished = true;
+                let recovered = !matches!(e, SdfError::Io(_))
+                    && matches!(self.parser.skip_to_record_end(), Ok(true));
+                if !recovered {
+                    self.finished = true;
+                }
                 Some(Err(e))
             }
         }

@@ -111,7 +111,11 @@ pub struct EcfpCountFingerprint {
 ///
 /// * `mol` - The molecule
 /// * `radius` - ECFP radius (2 for ECFP4, 3 for ECFP6)
-/// * `n_bits` - Length of the folded bit vector (typically 1024 or 2048)
+/// * `n_bits` - Length of the folded bit vector (typically 1024 or 2048).
+///   `0` yields an empty fingerprint.
+///
+/// Note: bits are not compatible with RDKit's Morgan fingerprints (different
+/// atom invariants and hash function); compare fingerprints only with each other.
 ///
 /// # Example
 ///
@@ -128,11 +132,12 @@ pub struct EcfpCountFingerprint {
 pub fn ecfp(mol: &Molecule, radius: usize, n_bits: usize) -> EcfpFingerprint {
     let identifiers = compute_ecfp_identifiers(mol, radius);
 
-    // Fold to bit vector
+    // Fold to bit vector (n_bits == 0 yields an empty fingerprint)
     let mut bits = vec![false; n_bits];
-    for &id in identifiers.values().flatten() {
-        let bit_idx = (id as usize) % n_bits;
-        bits[bit_idx] = true;
+    if n_bits > 0 {
+        for &id in identifiers.values().flatten() {
+            bits[(id as usize) % n_bits] = true;
+        }
     }
 
     EcfpFingerprint {
@@ -354,6 +359,13 @@ mod tests {
         let fp1 = ecfp(&mol, 2, 1024);
         let fp2 = ecfp(&mol, 2, 1024);
         assert_eq!(fp1.tanimoto(&fp2), 0.0);
+    }
+
+    #[test]
+    fn test_zero_bits_does_not_panic() {
+        let fp = ecfp(&make_ethanol(), 2, 0);
+        assert_eq!(fp.n_bits, 0);
+        assert_eq!(fp.num_on_bits(), 0);
     }
 
     #[test]

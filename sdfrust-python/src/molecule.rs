@@ -216,8 +216,21 @@ impl PyMolecule {
     ///
     /// Args:
     ///     bond: The Bond to add.
-    pub fn add_bond(&mut self, bond: PyBond) {
+    ///
+    /// Raises:
+    ///     IndexError: If the bond references an atom that does not exist.
+    pub fn add_bond(&mut self, bond: PyBond) -> PyResult<()> {
+        let n = self.inner.atoms.len();
+        for idx in [bond.inner.atom1, bond.inner.atom2] {
+            if idx >= n {
+                return Err(pyo3::exceptions::PyIndexError::new_err(format!(
+                    "Bond atom index {} out of range (molecule has {} atoms)",
+                    idx, n
+                )));
+            }
+        }
         self.inner.bonds.push(bond.inner);
+        Ok(())
     }
 
     /// Get the indices of atoms connected to the given atom.
@@ -963,8 +976,9 @@ impl PyMolecule {
     ///     >>> fp = mol.ecfp(radius=2, n_bits=2048)
     ///     >>> print(sum(fp))  # Number of set bits
     #[pyo3(signature = (radius=2, n_bits=2048))]
-    pub fn ecfp(&self, radius: usize, n_bits: usize) -> Vec<bool> {
-        sdfrust::fingerprints::ecfp::ecfp(&self.inner, radius, n_bits).bits
+    pub fn ecfp(&self, radius: usize, n_bits: usize) -> PyResult<Vec<bool>> {
+        check_n_bits(n_bits)?;
+        Ok(sdfrust::fingerprints::ecfp::ecfp(&self.inner, radius, n_bits).bits)
     }
 
     /// Compute ECFP/Morgan fingerprint as on-bit indices.
@@ -976,8 +990,9 @@ impl PyMolecule {
     /// Returns:
     ///     List of indices where bits are set.
     #[pyo3(signature = (radius=2, n_bits=2048))]
-    pub fn ecfp_on_bits(&self, radius: usize, n_bits: usize) -> Vec<usize> {
-        sdfrust::fingerprints::ecfp::ecfp(&self.inner, radius, n_bits).on_bits()
+    pub fn ecfp_on_bits(&self, radius: usize, n_bits: usize) -> PyResult<Vec<usize>> {
+        check_n_bits(n_bits)?;
+        Ok(sdfrust::fingerprints::ecfp::ecfp(&self.inner, radius, n_bits).on_bits())
     }
 
     /// Compute Tanimoto similarity between two molecules using ECFP.
@@ -1068,9 +1083,10 @@ impl PyMolecule {
         py: Python<'py>,
         radius: usize,
         n_bits: usize,
-    ) -> Bound<'py, numpy::PyArray1<bool>> {
+    ) -> PyResult<Bound<'py, numpy::PyArray1<bool>>> {
+        check_n_bits(n_bits)?;
         let fp = sdfrust::fingerprints::ecfp::ecfp(&self.inner, radius, n_bits);
-        numpy::PyArray1::from_vec(py, fp.bits)
+        Ok(numpy::PyArray1::from_vec(py, fp.bits))
     }
 
     // ============================================================
@@ -1214,6 +1230,16 @@ impl PyMolecule {
 /// Convert element symbol to atomic number.
 /// Returns 0 for unknown elements.
 #[cfg(feature = "numpy")]
+/// Rejects a zero-length fingerprint request.
+fn check_n_bits(n_bits: usize) -> PyResult<()> {
+    if n_bits == 0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "n_bits must be greater than 0",
+        ));
+    }
+    Ok(())
+}
+
 fn element_to_atomic_number(element: &str) -> u8 {
     match element.trim() {
         "H" => 1,

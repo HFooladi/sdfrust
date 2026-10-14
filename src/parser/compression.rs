@@ -8,19 +8,19 @@ use std::fs::File;
 use std::io::{BufRead, BufReader, Read};
 use std::path::Path;
 
-use flate2::read::GzDecoder;
+use flate2::read::MultiGzDecoder;
 
 use crate::error::Result;
 
 /// A reader that transparently handles both plain and gzip-compressed files.
 ///
-/// This enum wraps either a plain `BufReader<File>` or a `BufReader<GzDecoder<File>>`,
+/// This enum wraps either a plain `BufReader<File>` or a `BufReader<MultiGzDecoder<File>>`,
 /// allowing the same parsing code to work with both compressed and uncompressed files.
 pub enum MaybeGzReader {
     /// Plain (uncompressed) file reader.
     Plain(BufReader<File>),
     /// Gzip-compressed file reader.
-    Gzip(BufReader<GzDecoder<File>>),
+    Gzip(BufReader<MultiGzDecoder<File>>),
 }
 
 impl Read for MaybeGzReader {
@@ -82,7 +82,7 @@ pub fn open_maybe_gz<P: AsRef<Path>>(path: P) -> Result<MaybeGzReader> {
     let file = File::open(&path)?;
 
     if is_gzip_path(&path) {
-        let decoder = GzDecoder::new(file);
+        let decoder = MultiGzDecoder::new(file);
         Ok(MaybeGzReader::Gzip(BufReader::new(decoder)))
     } else {
         Ok(MaybeGzReader::Plain(BufReader::new(file)))
@@ -98,7 +98,7 @@ pub fn read_maybe_gz_to_string<P: AsRef<Path>>(path: P) -> Result<String> {
     let mut content = String::new();
 
     if is_gzip_path(&path) {
-        let mut decoder = GzDecoder::new(file);
+        let mut decoder = MultiGzDecoder::new(file);
         decoder.read_to_string(&mut content)?;
     } else {
         let mut reader = BufReader::new(file);

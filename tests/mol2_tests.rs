@@ -285,10 +285,10 @@ USER_CHARGES
     assert_eq!(mol.name, "acetate");
     assert_eq!(mol.atom_count(), 4);
 
-    // Check that partial charges are converted to formal charges
-    assert_eq!(mol.atoms[1].formal_charge, 1); // C2 has +0.8, rounds to +1
-    assert_eq!(mol.atoms[2].formal_charge, -1); // O1 has -0.9, rounds to -1
-    assert_eq!(mol.atoms[3].formal_charge, -1); // O2 has -0.9, rounds to -1
+    // Partial charges are stored as partial charges, never rounded into formal charges
+    assert_eq!(mol.atoms[1].partial_charge, Some(0.8));
+    assert_eq!(mol.atoms[2].partial_charge, Some(-0.9));
+    assert!(mol.atoms.iter().all(|a| a.formal_charge == 0));
 }
 
 // ============================================================================

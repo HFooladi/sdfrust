@@ -54,6 +54,9 @@ pub enum SdfError {
     #[error("Gzip file detected but gzip feature not enabled. Enable with: --features gzip")]
     GzipNotEnabled,
 
+    #[error("Molecule cannot be written in this format: {0}")]
+    Unwritable(String),
+
     #[error("Bond inference: unknown element '{element}' at atom index {index}")]
     BondInferenceError { element: String, index: usize },
 }

@@ -21,3 +21,4 @@ Thumbs.db
 benches/data/*.sdf
 benches/comparison/.venv/
 benches/comparison/results/
+sdfrust-python/benchmarks/reports/*.json

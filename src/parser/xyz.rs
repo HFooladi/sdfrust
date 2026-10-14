@@ -22,36 +22,21 @@ use crate::atom::Atom;
 use crate::error::{Result, SdfError};
 use crate::molecule::Molecule;
 
+/// Element symbols indexed by atomic number - 1.
+const ELEMENT_SYMBOLS: [&str; 118] = [
+    "H", "He", "Li", "Be", "B", "C", "N", "O", "F", "Ne", "Na", "Mg", "Al", "Si", "P", "S", "Cl",
+    "Ar", "K", "Ca", "Sc", "Ti", "V", "Cr", "Mn", "Fe", "Co", "Ni", "Cu", "Zn", "Ga", "Ge", "As",
+    "Se", "Br", "Kr", "Rb", "Sr", "Y", "Zr", "Nb", "Mo", "Tc", "Ru", "Rh", "Pd", "Ag", "Cd", "In",
+    "Sn", "Sb", "Te", "I", "Xe", "Cs", "Ba", "La", "Ce", "Pr", "Nd", "Pm", "Sm", "Eu", "Gd", "Tb",
+    "Dy", "Ho", "Er", "Tm", "Yb", "Lu", "Hf", "Ta", "W", "Re", "Os", "Ir", "Pt", "Au", "Hg", "Tl",
+    "Pb", "Bi", "Po", "At", "Rn", "Fr", "Ra", "Ac", "Th", "Pa", "U", "Np", "Pu", "Am", "Cm", "Bk",
+    "Cf", "Es", "Fm", "Md", "No", "Lr", "Rf", "Db", "Sg", "Bh", "Hs", "Mt", "Ds", "Rg", "Cn", "Nh",
+    "Fl", "Mc", "Lv", "Ts", "Og",
+];
+
 /// Maps atomic numbers to element symbols.
 fn atomic_number_to_symbol(num: u8) -> Option<&'static str> {
-    match num {
-        1 => Some("H"),
-        2 => Some("He"),
-        3 => Some("Li"),
-        4 => Some("Be"),
-        5 => Some("B"),
-        6 => Some("C"),
-        7 => Some("N"),
-        8 => Some("O"),
-        9 => Some("F"),
-        10 => Some("Ne"),
-        11 => Some("Na"),
-        12 => Some("Mg"),
-        13 => Some("Al"),
-        14 => Some("Si"),
-        15 => Some("P"),
-        16 => Some("S"),
-        17 => Some("Cl"),
-        18 => Some("Ar"),
-        19 => Some("K"),
-        20 => Some("Ca"),
-        26 => Some("Fe"),
-        29 => Some("Cu"),
-        30 => Some("Zn"),
-        35 => Some("Br"),
-        53 => Some("I"),
-        _ => None,
-    }
+    ELEMENT_SYMBOLS.get((num as usize).checked_sub(1)?).copied()
 }
 
 /// Normalizes an element symbol to proper case (first letter uppercase, rest lowercase).
@@ -176,6 +161,8 @@ impl<R: BufRead> XyzParser<R> {
             z,
             formal_charge: 0,
             mass_difference: 0,
+            isotope: None,
+            partial_charge: None,
             stereo_parity: None,
             hydrogen_count: None,
             valence: None,
@@ -207,7 +194,7 @@ impl<R: BufRead> XyzParser<R> {
         let name = self.current_line.trim().to_string();
 
         // Parse atoms
-        let mut atoms = Vec::with_capacity(num_atoms);
+        let mut atoms = Vec::with_capacity(num_atoms.min(super::sdf::MAX_PREALLOC));
         for i in 0..num_atoms {
             if !self.read_line()? {
                 return Err(SdfError::AtomCountMismatch {

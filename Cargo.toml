@@ -4,10 +4,10 @@ resolver = "2"
 
 [package]
 name = "sdfrust"
-version = "0.6.0"
+version = "0.7.0"
 edition = "2024"
 rust-version = "1.85"
-authors = ["Hosein Fooladi"]
+authors = ["Hosein Fooladi <fooladi.hosein@gmail.com>"]
 description = "A fast, pure-Rust parser for SDF, MOL2, and XYZ chemical structure files"
 license = "MIT"
 repository = "https://github.com/hfooladi/sdfrust"
