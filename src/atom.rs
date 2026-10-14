@@ -19,8 +19,17 @@ pub struct Atom {
     /// Formal charge (-15 to +15, 0 = uncharged).
     pub formal_charge: i8,
 
-    /// Mass difference from monoisotopic mass (-3 to +4).
+    /// V2000 atom-block mass difference (-3 to +4) relative to the element's
+    /// standard mass. Preserved for round-tripping; prefer [`Atom::isotope`].
     pub mass_difference: i8,
+
+    /// Absolute isotope mass number (e.g. 13 for ¹³C), from `M  ISO` (V2000) or
+    /// `MASS=` (V3000). `None` means natural isotopic abundance.
+    pub isotope: Option<u16>,
+
+    /// Partial atomic charge read from the file (e.g. MOL2 charge column).
+    /// Not used for formal-charge or valence calculations.
+    pub partial_charge: Option<f64>,
 
     /// Stereo parity (0 = not stereo, 1 = odd, 2 = even, 3 = either/unknown).
     pub stereo_parity: Option<u8>,
@@ -55,6 +64,8 @@ impl Atom {
             z,
             formal_charge: 0,
             mass_difference: 0,
+            isotope: None,
+            partial_charge: None,
             stereo_parity: None,
             hydrogen_count: None,
             valence: None,
@@ -78,6 +89,16 @@ impl Atom {
         (dx * dx + dy * dy + dz * dz).sqrt()
     }
 
+    /// Number of unpaired electrons implied by the MDL radical code
+    /// (singlet = 2, doublet = 1, triplet = 2), matching RDKit.
+    pub fn radical_electrons(&self) -> u8 {
+        match self.radical {
+            Some(1) | Some(3) => 2,
+            Some(2) => 1,
+            _ => 0,
+        }
+    }
+
     /// Returns true if this atom has a non-zero formal charge.
     pub fn is_charged(&self) -> bool {
         self.formal_charge != 0
@@ -94,6 +115,8 @@ impl Default for Atom {
             z: 0.0,
             formal_charge: 0,
             mass_difference: 0,
+            isotope: None,
+            partial_charge: None,
             stereo_parity: None,
             hydrogen_count: None,
             valence: None,

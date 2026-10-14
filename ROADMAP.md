@@ -696,7 +696,7 @@ print(mol.num_bonds)          # 2
 - [x] `ogb_atom_features(mol) → [N, 9]` integer matrix
 - [x] `ogb_bond_features(mol) → [E, 3]` integer matrix
 - [x] `ogb_graph_features(mol) → OgbGraphFeatures` with directed edge index
-- [x] Matches OGB `AtomEncoder`/`BondEncoder` conventions exactly
+- [x] Matches OGB `AtomEncoder`/`BondEncoder` conventions (fixed in 0.7.0; 0.6.0 used raw values, validated against `ogb.utils.features` since)
 - [x] **Replaces entire RDKit preprocessing pipeline**
 
 ### Phase 11.9 — ECFP/Morgan Fingerprints ✅

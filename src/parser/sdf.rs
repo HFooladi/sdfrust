@@ -33,10 +33,19 @@ impl std::fmt::Display for FileFormat {
     }
 }
 
+/// Upper bound on pre-allocated capacity derived from untrusted counts.
+pub(crate) const MAX_PREALLOC: usize = 1 << 16;
+
 /// SDF V2000 format parser.
+///
+/// Records whose counts line declares `V3000` are transparently handed to the
+/// V3000 parser, so mixed V2000/V3000 files are parsed record by record.
 pub struct SdfParser<R> {
     reader: R,
     line_number: usize,
+    /// True once the `$$$$` terminator of the current record has been consumed.
+    record_ended: bool,
+    raw: Vec<u8>,
 }
 
 impl<R: BufRead> SdfParser<R> {
@@ -45,31 +54,53 @@ impl<R: BufRead> SdfParser<R> {
         Self {
             reader,
             line_number: 0,
+            record_ended: false,
+            raw: Vec::new(),
         }
     }
 
-    /// Reads the next line from the input.
+    /// Reads the next line from the input. Invalid UTF-8 is replaced with U+FFFD
+    /// rather than aborting the file (vendor SDFs often carry Latin-1 data).
     fn read_line(&mut self, buf: &mut String) -> Result<bool> {
         buf.clear();
-        let bytes_read = self.reader.read_line(buf)?;
-        if bytes_read > 0 {
-            self.line_number += 1;
-            // Remove trailing newline
-            if buf.ends_with('\n') {
-                buf.pop();
-                if buf.ends_with('\r') {
-                    buf.pop();
-                }
-            }
-            Ok(true)
-        } else {
-            Ok(false)
+        self.raw.clear();
+        let bytes_read = self.reader.read_until(b'\n', &mut self.raw)?;
+        if bytes_read == 0 {
+            return Ok(false);
         }
+        self.line_number += 1;
+        if self.raw.ends_with(b"\n") {
+            self.raw.pop();
+        }
+        if self.raw.ends_with(b"\r") {
+            self.raw.pop();
+        }
+        buf.push_str(&String::from_utf8_lossy(&self.raw));
+        Ok(true)
+    }
+
+    /// Skips the rest of the current record (up to and including `$$$$`).
+    ///
+    /// Used by [`SdfIterator`] to resynchronize after a malformed record.
+    /// Returns `false` if the end of input was reached.
+    pub fn skip_to_record_end(&mut self) -> Result<bool> {
+        if self.record_ended {
+            return Ok(true);
+        }
+        let mut line = String::new();
+        while self.read_line(&mut line)? {
+            if line.starts_with("$$$$") {
+                self.record_ended = true;
+                return Ok(true);
+            }
+        }
+        Ok(false)
     }
 
     /// Parses a single molecule from the input.
     /// Returns None if end of file is reached.
     pub fn parse_molecule(&mut self) -> Result<Option<Molecule>> {
+        self.record_ended = false;
         let mut line = String::new();
 
         // Line 1: Molecule name
@@ -77,11 +108,18 @@ impl<R: BufRead> SdfParser<R> {
             return Ok(None);
         }
         let name = line.trim().to_string();
+        // Trailing whitespace-only lines at the end of a file are not a record.
+        let mut only_blank = name.is_empty();
 
         // Line 2: Program/timestamp line
         if !self.read_line(&mut line)? {
-            return Err(SdfError::MissingSection("header".to_string()));
+            return if only_blank {
+                Ok(None)
+            } else {
+                Err(SdfError::MissingSection("header".to_string()))
+            };
         }
+        only_blank &= line.trim().is_empty();
         let program_line = if line.trim().is_empty() {
             None
         } else {
@@ -90,8 +128,13 @@ impl<R: BufRead> SdfParser<R> {
 
         // Line 3: Comment
         if !self.read_line(&mut line)? {
-            return Err(SdfError::MissingSection("header".to_string()));
+            return if only_blank {
+                Ok(None)
+            } else {
+                Err(SdfError::MissingSection("header".to_string()))
+            };
         }
+        only_blank &= line.trim().is_empty();
         let comment = if line.trim().is_empty() {
             None
         } else {
@@ -100,8 +143,31 @@ impl<R: BufRead> SdfParser<R> {
 
         // Line 4: Counts line
         if !self.read_line(&mut line)? {
-            return Err(SdfError::MissingSection("counts line".to_string()));
+            return if only_blank {
+                Ok(None)
+            } else {
+                Err(SdfError::MissingSection("counts line".to_string()))
+            };
         }
+        if only_blank && line.trim().is_empty() {
+            // Four blank lines in a row: either trailing whitespace or garbage.
+            // Consume blank lines; if only whitespace remains, the file is done.
+            loop {
+                if !self.read_line(&mut line)? {
+                    return Ok(None);
+                }
+                if !line.trim().is_empty() {
+                    return Err(SdfError::InvalidCountsLine(line.clone()));
+                }
+            }
+        }
+
+        if line.contains("V3000") {
+            return self
+                .parse_v3000_record(&name, program_line, comment, &line)
+                .map(Some);
+        }
+
         let (atom_count, bond_count) = self.parse_counts_line(&line)?;
 
         // Parse atoms
@@ -130,8 +196,11 @@ impl<R: BufRead> SdfParser<R> {
             bonds.push(bond);
         }
 
-        // Parse property block until M  END
+        // Parse property block until M  END. Per the CTfile spec, the presence of
+        // any M  CHG or M  RAD line supersedes all charges and radicals given in
+        // the atom block.
         let mut properties = HashMap::new();
+        let mut atom_block_reset = false;
         loop {
             if !self.read_line(&mut line)? {
                 break;
@@ -139,53 +208,45 @@ impl<R: BufRead> SdfParser<R> {
             if line.starts_with("M  END") {
                 break;
             }
-            // Handle M  CHG (charge) lines
-            if line.starts_with("M  CHG") {
-                self.parse_charge_line(&line, &mut atoms)?;
+            if line.starts_with("$$$$") {
+                // Missing M  END: the record is over, don't swallow the next one.
+                self.record_ended = true;
+                break;
             }
-            // Handle M  ISO (isotope) lines
-            if line.starts_with("M  ISO") {
-                self.parse_isotope_line(&line, &mut atoms)?;
+            let is_chg = line.starts_with("M  CHG");
+            let is_rad = line.starts_with("M  RAD");
+            if (is_chg || is_rad) && !atom_block_reset {
+                for atom in atoms.iter_mut() {
+                    atom.formal_charge = 0;
+                    atom.radical = None;
+                }
+                atom_block_reset = true;
+            }
+            if is_chg {
+                for (idx, value) in self.parse_property_pairs(&line, atoms.len())? {
+                    atoms[idx].formal_charge =
+                        i8::try_from(value).map_err(|_| SdfError::Parse {
+                            line: self.line_number,
+                            message: format!("Charge out of range: {}", value),
+                        })?;
+                }
+            } else if is_rad {
+                for (idx, value) in self.parse_property_pairs(&line, atoms.len())? {
+                    atoms[idx].radical = match value {
+                        1..=3 => Some(value as u8),
+                        _ => None,
+                    };
+                }
+            } else if line.starts_with("M  ISO") {
+                for (idx, value) in self.parse_property_pairs(&line, atoms.len())? {
+                    atoms[idx].isotope = u16::try_from(value).ok().filter(|&m| m > 0);
+                }
             }
         }
 
         // Parse data block until $$$$ or EOF
-        let mut current_property_name: Option<String> = None;
-        let mut current_property_value = String::new();
-
-        loop {
-            if !self.read_line(&mut line)? {
-                break;
-            }
-            if line.starts_with("$$$$") {
-                // Save any pending property
-                if let Some(prop_name) = current_property_name.take() {
-                    properties.insert(prop_name, current_property_value.trim().to_string());
-                }
-                break;
-            }
-            if line.starts_with("> ") || line.starts_with(">  ") {
-                // Save previous property if exists
-                if let Some(prop_name) = current_property_name.take() {
-                    properties.insert(prop_name, current_property_value.trim().to_string());
-                }
-                current_property_value.clear();
-
-                // Extract property name from angle brackets
-                if let Some(start) = line.find('<') {
-                    // Find closing '>' after the opening '<'
-                    if let Some(end) = line[start + 1..].find('>') {
-                        let prop_name = line[start + 1..start + 1 + end].to_string();
-                        current_property_name = Some(prop_name);
-                    }
-                }
-            } else if current_property_name.is_some() && !line.is_empty() {
-                // Accumulate property value
-                if !current_property_value.is_empty() {
-                    current_property_value.push('\n');
-                }
-                current_property_value.push_str(&line);
-            }
+        if !self.record_ended {
+            properties = self.parse_data_block()?;
         }
 
         Ok(Some(Molecule {
@@ -202,11 +263,140 @@ impl<R: BufRead> SdfParser<R> {
         }))
     }
 
+    /// Parses the `> <name>` data items following `M  END`, up to `$$$$`.
+    fn parse_data_block(&mut self) -> Result<HashMap<String, String>> {
+        let mut properties = HashMap::new();
+        let mut line = String::new();
+        let mut current_property_name: Option<String> = None;
+        let mut current_property_value = String::new();
+
+        loop {
+            if !self.read_line(&mut line)? {
+                break;
+            }
+            if line.starts_with("$$$$") {
+                self.record_ended = true;
+                break;
+            }
+            if line.starts_with('>') && line.contains('<') {
+                // Save previous property if exists
+                if let Some(prop_name) = current_property_name.take() {
+                    properties.insert(prop_name, current_property_value.trim().to_string());
+                }
+                current_property_value.clear();
+
+                // Extract property name from angle brackets
+                if let Some(start) = line.find('<') {
+                    if let Some(end) = line[start + 1..].find('>') {
+                        let prop_name = line[start + 1..start + 1 + end].to_string();
+                        current_property_name = Some(prop_name);
+                    }
+                }
+            } else if line.is_empty() {
+                // A blank line terminates the current data item.
+                if let Some(prop_name) = current_property_name.take() {
+                    properties.insert(prop_name, current_property_value.trim().to_string());
+                }
+                current_property_value.clear();
+            } else if current_property_name.is_some() {
+                if !current_property_value.is_empty() {
+                    current_property_value.push('\n');
+                }
+                current_property_value.push_str(&line);
+            }
+        }
+        if let Some(prop_name) = current_property_name.take() {
+            properties.insert(prop_name, current_property_value.trim().to_string());
+        }
+        Ok(properties)
+    }
+
+    /// Collects a V3000 record (whose header and counts line were already read)
+    /// and parses it with the V3000 parser.
+    fn parse_v3000_record(
+        &mut self,
+        name: &str,
+        program_line: Option<String>,
+        comment: Option<String>,
+        counts_line: &str,
+    ) -> Result<Molecule> {
+        let mut record = String::new();
+        record.push_str(name);
+        record.push('\n');
+        record.push_str(program_line.as_deref().unwrap_or(""));
+        record.push('\n');
+        record.push_str(comment.as_deref().unwrap_or(""));
+        record.push('\n');
+        record.push_str(counts_line);
+        record.push('\n');
+
+        let mut line = String::new();
+        while self.read_line(&mut line)? {
+            record.push_str(&line);
+            record.push('\n');
+            if line.starts_with("$$$$") {
+                self.record_ended = true;
+                break;
+            }
+        }
+
+        let mut mol = super::sdf_v3000::parse_sdf_v3000_string(&record)?;
+        mol.program_line = program_line;
+        mol.comment = comment;
+        Ok(mol)
+    }
+
+    /// Returns an error for fixed-width lines containing non-ASCII characters,
+    /// which would otherwise break column slicing.
+    fn require_ascii(&self, line: &str, what: &str) -> Result<()> {
+        if line.is_ascii() {
+            Ok(())
+        } else {
+            Err(SdfError::Parse {
+                line: self.line_number,
+                message: format!("Non-ASCII characters in {}: {}", what, line),
+            })
+        }
+    }
+
+    /// Parses `M  CHG/ISO/RAD  n  aaa vvv ...` into 0-based (atom index, value) pairs.
+    fn parse_property_pairs(&self, line: &str, atom_count: usize) -> Result<Vec<(usize, i32)>> {
+        let bad = |message: String| SdfError::Parse {
+            line: self.line_number,
+            message,
+        };
+        let mut tokens = line.get(6..).unwrap_or("").split_whitespace();
+        let count: usize = tokens
+            .next()
+            .and_then(|t| t.parse().ok())
+            .ok_or_else(|| bad(format!("Invalid property line: {}", line)))?;
+        let mut pairs = Vec::with_capacity(count.min(8));
+        for _ in 0..count {
+            let (Some(a), Some(v)) = (tokens.next(), tokens.next()) else {
+                return Err(bad(format!("Truncated property line: {}", line)));
+            };
+            let atom: usize = a
+                .parse()
+                .map_err(|_| bad(format!("Invalid atom number '{}' in: {}", a, line)))?;
+            let value: i32 = v
+                .parse()
+                .map_err(|_| bad(format!("Invalid value '{}' in: {}", v, line)))?;
+            if atom == 0 || atom > atom_count {
+                return Err(SdfError::InvalidAtomIndex {
+                    index: atom,
+                    atom_count,
+                });
+            }
+            pairs.push((atom - 1, value));
+        }
+        Ok(pairs)
+    }
+
     /// Parses the counts line (line 4 of the molfile).
     fn parse_counts_line(&self, line: &str) -> Result<(usize, usize)> {
         // V2000 format: aaabbblllfffcccsssxxxrrrpppiiimmmvvvvvv
         // Positions: 0-2 = atom count, 3-5 = bond count
-        if line.len() < 6 {
+        if line.len() < 6 || !line.is_ascii() {
             return Err(SdfError::InvalidCountsLine(line.to_string()));
         }
 
@@ -228,79 +418,55 @@ impl<R: BufRead> SdfParser<R> {
         // V2000 atom line format:
         // xxxxx.xxxxyyyyy.yyyyzzzzz.zzzz aaaddcccssshhhbbbvvvHHHrrriiimmmnnneee
         // Positions: 0-9 x, 10-19 y, 20-29 z, 31-33 symbol, 34-35 mass diff, 36-38 charge
+        self.require_ascii(line, "atom line")?;
 
-        if line.len() < 34 {
+        // Writers that strip trailing spaces may leave a one-letter symbol at col 31
+        if line.len() < 32 {
             return Err(SdfError::Parse {
                 line: self.line_number,
                 message: format!("Atom line too short: {}", line),
             });
         }
+        let field = |a: usize, b: usize| line.get(a..b.min(line.len())).unwrap_or("").trim();
 
-        let x: f64 = line[0..10]
-            .trim()
+        let x: f64 = field(0, 10)
             .parse()
             .map_err(|_| SdfError::InvalidCoordinate(line[0..10].to_string()))?;
 
-        let y: f64 = line[10..20]
-            .trim()
+        let y: f64 = field(10, 20)
             .parse()
             .map_err(|_| SdfError::InvalidCoordinate(line[10..20].to_string()))?;
 
-        let z: f64 = line[20..30]
-            .trim()
+        let z: f64 = field(20, 30)
             .parse()
             .map_err(|_| SdfError::InvalidCoordinate(line[20..30].to_string()))?;
 
-        let element = line[31..34].trim().to_string();
+        let element = field(31, 34).to_string();
 
         // Parse optional fields
-        let mass_difference: i8 = if line.len() >= 36 {
-            line[34..36].trim().parse().unwrap_or(0)
-        } else {
-            0
-        };
+        let mass_difference: i8 = field(34, 36).parse().unwrap_or(0);
 
         // Charge mapping in V2000: 0=uncharged, 1=+3, 2=+2, 3=+1, 4=doublet radical, 5=-1, 6=-2, 7=-3
-        let formal_charge: i8 = if line.len() >= 39 {
-            let charge_code: u8 = line[36..39].trim().parse().unwrap_or(0);
-            match charge_code {
-                0 => 0,
-                1 => 3,
-                2 => 2,
-                3 => 1,
-                4 => 0, // doublet radical
-                5 => -1,
-                6 => -2,
-                7 => -3,
-                _ => 0,
-            }
-        } else {
-            0
+        let charge_code: u8 = field(36, 39).parse().unwrap_or(0);
+        let formal_charge: i8 = match charge_code {
+            1 => 3,
+            2 => 2,
+            3 => 1,
+            5 => -1,
+            6 => -2,
+            7 => -3,
+            _ => 0,
         };
+        let radical = if charge_code == 4 { Some(2) } else { None };
 
         // Stereo parity
-        let stereo_parity: Option<u8> = if line.len() >= 42 {
-            let parity: u8 = line[39..42].trim().parse().unwrap_or(0);
-            if parity > 0 { Some(parity) } else { None }
-        } else {
-            None
-        };
+        let stereo_parity: Option<u8> = field(39, 42).parse().ok().filter(|&p: &u8| p > 0);
 
         // Hydrogen count
-        let hydrogen_count: Option<u8> = if line.len() >= 45 {
-            let hcount: u8 = line[42..45].trim().parse().unwrap_or(0);
-            if hcount > 0 { Some(hcount) } else { None }
-        } else {
-            None
-        };
+        let hydrogen_count: Option<u8> = field(42, 45).parse().ok().filter(|&h: &u8| h > 0);
 
         // Valence
-        let valence: Option<u8> = if line.len() >= 51 {
-            let val: u8 = line[48..51].trim().parse().unwrap_or(0);
-            if val > 0 { Some(val) } else { None }
-        } else {
-            None
-        };
+        let valence: Option<u8> = field(48, 51).parse().ok().filter(|&v: &u8| v > 0);
 
         Ok(Atom {
             index,
@@ -310,13 +476,15 @@ impl<R: BufRead> SdfParser<R> {
             z,
             formal_charge,
             mass_difference,
+            isotope: None,
+            partial_charge: None,
             stereo_parity,
             hydrogen_count,
             valence,
             v3000_id: None,
             atom_atom_mapping: None,
             rgroup_label: None,
-            radical: None,
+            radical,
         })
     }
 
@@ -325,6 +493,7 @@ impl<R: BufRead> SdfParser<R> {
         // V2000 bond line format:
         // 111222tttsssxxxrrrccc
         // Positions: 0-2 = first atom, 3-5 = second atom, 6-8 = bond type, 9-11 = stereo
+        self.require_ascii(line, "bond line")?;
 
         if line.len() < 9 {
             return Err(SdfError::Parse {
@@ -405,62 +574,12 @@ impl<R: BufRead> SdfParser<R> {
             reacting_center: None,
         })
     }
-
-    /// Parses M  CHG charge lines and updates atoms.
-    fn parse_charge_line(&self, line: &str, atoms: &mut [Atom]) -> Result<()> {
-        // Format: M  CHG  n   aaa vvv   aaa vvv ...
-        // n = number of entries, aaa = atom number (1-based), vvv = charge
-        if line.len() < 9 {
-            return Ok(());
-        }
-
-        let count: usize = line[6..9].trim().parse().unwrap_or(0);
-        let mut pos = 9;
-
-        for _ in 0..count {
-            if pos + 8 > line.len() {
-                break;
-            }
-            let atom_num: usize = line[pos..pos + 4].trim().parse().unwrap_or(0);
-            let charge: i8 = line[pos + 4..pos + 8].trim().parse().unwrap_or(0);
-
-            if atom_num > 0 && atom_num <= atoms.len() {
-                atoms[atom_num - 1].formal_charge = charge;
-            }
-            pos += 8;
-        }
-
-        Ok(())
-    }
-
-    /// Parses M  ISO isotope lines and updates atoms.
-    fn parse_isotope_line(&self, line: &str, atoms: &mut [Atom]) -> Result<()> {
-        // Format: M  ISO  n   aaa vvv   aaa vvv ...
-        if line.len() < 9 {
-            return Ok(());
-        }
-
-        let count: usize = line[6..9].trim().parse().unwrap_or(0);
-        let mut pos = 9;
-
-        for _ in 0..count {
-            if pos + 8 > line.len() {
-                break;
-            }
-            let atom_num: usize = line[pos..pos + 4].trim().parse().unwrap_or(0);
-            let mass_diff: i8 = line[pos + 4..pos + 8].trim().parse().unwrap_or(0);
-
-            if atom_num > 0 && atom_num <= atoms.len() {
-                atoms[atom_num - 1].mass_difference = mass_diff;
-            }
-            pos += 8;
-        }
-
-        Ok(())
-    }
 }
 
 /// Iterator over molecules in an SDF file.
+///
+/// A malformed record yields `Some(Err(_))`; iteration then resumes at the next
+/// record (after the following `$$$$`), so callers can skip bad entries.
 pub struct SdfIterator<R> {
     parser: SdfParser<R>,
     finished: bool,
@@ -491,7 +610,12 @@ impl<R: BufRead> Iterator for SdfIterator<R> {
                 None
             }
             Err(e) => {
-                self.finished = true;
+                // I/O errors are not recoverable; parse errors skip to the next record.
+                let recovered = !matches!(e, SdfError::Io(_))
+                    && matches!(self.parser.skip_to_record_end(), Ok(true));
+                if !recovered {
+                    self.finished = true;
+                }
                 Some(Err(e))
             }
         }

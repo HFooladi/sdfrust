@@ -3,27 +3,35 @@
 //! Produces atom and bond feature matrices matching the OGB `AtomEncoder`/`BondEncoder`
 //! conventions. A single call replaces the entire RDKit preprocessing pipeline.
 //!
+//! Every feature is the index into the corresponding list of
+//! `ogb.utils.features.allowable_features`, with out-of-range values mapped to the
+//! trailing `misc` bucket (OGB's `safe_index`). The output can therefore be fed
+//! directly into OGB's `AtomEncoder`/`BondEncoder`.
+//!
 //! ## OGB Atom Features (9 features per atom)
 //!
-//! | Index | Feature | Encoding |
+//! | Index | Feature | Encoding (dim) |
 //! |-------|---------|----------|
-//! | 0 | Atomic number | 1-118 |
-//! | 1 | Chirality tag | 0=unspecified, 1=CW, 2=CCW, 3=other |
-//! | 2 | Degree | 0-10 |
-//! | 3 | Formal charge | shifted: charge + 5 (range 0-10) |
-//! | 4 | Num Hs | 0-8 |
-//! | 5 | Num radical electrons | 0-4 |
-//! | 6 | Hybridization | 0=S, 1=SP, 2=SP2, 3=SP3, 4=SP3D, 5=SP3D2 |
-//! | 7 | Is aromatic | 0 or 1 |
-//! | 8 | Is in ring | 0 or 1 |
+//! | 0 | Atomic number | Z - 1 (0..=117), misc = 118 (119) |
+//! | 1 | Chirality tag | 0=unspecified, 1=CW, 2=CCW, 3=other (5) |
+//! | 2 | Total degree (incl. implicit H) | 0..=10, misc = 11 (12) |
+//! | 3 | Formal charge | charge + 5 for -5..=5, misc = 11 (12) |
+//! | 4 | Total num Hs | 0..=8, misc = 9 (10) |
+//! | 5 | Num radical electrons | 0..=4, misc = 5 (6) |
+//! | 6 | Hybridization | 0=SP, 1=SP2, 2=SP3, 3=SP3D, 4=SP3D2, 5=misc (incl. S) (6) |
+//! | 7 | Is aromatic | 0 or 1 (2) |
+//! | 8 | Is in ring | 0 or 1 (2) |
 //!
 //! ## OGB Bond Features (3 features per bond)
 //!
-//! | Index | Feature | Encoding |
+//! | Index | Feature | Encoding (dim) |
 //! |-------|---------|----------|
-//! | 0 | Bond type | 0=single, 1=double, 2=triple, 3=aromatic |
-//! | 1 | Bond stereo | 0=none, 1=any, 2=E/Z, 3=CIS, 4=TRANS |
-//! | 2 | Is conjugated | 0 or 1 |
+//! | 0 | Bond type | 0=single, 1=double, 2=triple, 3=aromatic, 4=misc (5) |
+//! | 1 | Bond stereo | 0=NONE, 1=Z, 2=E, 3=CIS, 4=TRANS, 5=ANY (6) |
+//! | 2 | Is conjugated | 0 or 1 (2) |
+//!
+//! Bond stereo: E/Z perception from coordinates is not implemented yet, so only
+//! `STEREONONE` (0) and `STEREOANY` (5, for "either" double bonds) are emitted.
 //!
 //! # Example
 //!
@@ -88,6 +96,15 @@ pub struct OgbGraphFeatures {
     pub edge_dst: Vec<usize>,
 }
 
+/// OGB's `safe_index`: values outside `0..misc` map to the trailing `misc` bucket.
+fn safe_index(value: i32, misc: i32) -> i32 {
+    if (0..misc).contains(&value) {
+        value
+    } else {
+        misc
+    }
+}
+
 /// Compute OGB-compatible atom features for a molecule.
 ///
 /// Returns a matrix of shape `[N, 9]` where N is the number of atoms.
@@ -104,8 +121,8 @@ pub struct OgbGraphFeatures {
 /// mol.bonds.push(Bond::new(0, 1, BondOrder::Single));
 ///
 /// let feats = ogb::ogb_atom_features(&mol);
-/// assert_eq!(feats.features[0][0], 6); // Carbon atomic number
-/// assert_eq!(feats.features[1][0], 1); // Hydrogen atomic number
+/// assert_eq!(feats.features[0][0], 5); // Carbon: Z - 1
+/// assert_eq!(feats.features[1][0], 0); // Hydrogen: Z - 1
 /// ```
 pub fn ogb_atom_features(mol: &Molecule) -> OgbAtomFeatures {
     let n = mol.atom_count();
@@ -121,29 +138,30 @@ pub fn ogb_atom_features(mol: &Molecule) -> OgbAtomFeatures {
         let atom = &mol.atoms[i];
         let mut feat = vec![0i32; 9];
 
-        // Feature 0: Atomic number
+        // Feature 0: Atomic number, index into range(1, 119)
         feat[0] = get_element(&atom.element)
-            .map(|e| e.atomic_number as i32)
-            .unwrap_or(0);
+            .map(|e| safe_index(e.atomic_number as i32 - 1, 118))
+            .unwrap_or(118);
 
-        // Feature 1: Chirality tag (CIP-based perception)
-        // 0=unspecified, 1=CW (R), 2=CCW (S), 3=other
+        // Feature 1: Chirality tag (CHI_UNSPECIFIED, CW, CCW, OTHER)
         feat[1] = chiralities[i].to_ogb_index() as i32;
 
-        // Feature 2: Degree
-        feat[2] = adj.degree(i) as i32;
+        let num_hs = valence::implicit_hydrogen_count(mol, i) as i32;
 
-        // Feature 3: Formal charge (shifted: charge + 5)
-        feat[3] = (atom.formal_charge as i32) + 5;
+        // Feature 2: Total degree (explicit neighbors + implicit H), like GetTotalDegree
+        feat[2] = safe_index(adj.degree(i) as i32 + num_hs, 11);
 
-        // Feature 4: Number of Hs (implicit only, matching RDKit's GetTotalNumHs
-        // when explicit H atoms are present as separate graph nodes)
-        feat[4] = valence::implicit_hydrogen_count(mol, i) as i32;
+        // Feature 3: Formal charge, index into [-5..=5]
+        feat[3] = safe_index(atom.formal_charge as i32 + 5, 11);
+
+        // Feature 4: Total number of Hs on the atom (GetTotalNumHs; explicit H
+        // atoms are separate graph nodes and counted in the degree instead)
+        feat[4] = safe_index(num_hs, 9);
 
         // Feature 5: Number of radical electrons
-        feat[5] = atom.radical.unwrap_or(0) as i32;
+        feat[5] = safe_index(atom.radical_electrons() as i32, 5);
 
-        // Feature 6: Hybridization
+        // Feature 6: Hybridization, index into [SP, SP2, SP3, SP3D, SP3D2]
         feat[6] = hybridizations[i].to_ogb_index() as i32;
 
         // Feature 7: Is aromatic
@@ -189,39 +207,28 @@ pub fn ogb_bond_features(mol: &Molecule) -> OgbBondFeatures {
     for (i, bond) in mol.bonds.iter().enumerate() {
         let mut feat = vec![0i32; 3];
 
-        // Feature 0: Bond type
-        // 0=single, 1=double, 2=triple, 3=aromatic
-        // Use perceived aromaticity to override Kekulized bond types
+        // Feature 0: Bond type, index into [SINGLE, DOUBLE, TRIPLE, AROMATIC]
+        // Perceived aromaticity overrides Kekulé bond orders, as in RDKit.
         feat[0] = if aromatic_bonds[i] {
-            3 // Perceived aromatic
+            3
         } else {
             match bond.order {
                 BondOrder::Single => 0,
                 BondOrder::Double => 1,
                 BondOrder::Triple => 2,
                 BondOrder::Aromatic => 3,
-                BondOrder::SingleOrDouble => 0,
-                BondOrder::SingleOrAromatic => 0,
-                BondOrder::DoubleOrAromatic => 1,
-                BondOrder::Any => 0,
-                BondOrder::Coordination => 0,
-                BondOrder::Hydrogen => 0,
+                _ => 4, // query, coordination and hydrogen bonds → misc
             }
         };
 
-        // Feature 1: Bond stereo (E/Z double bond stereo only)
-        // 0=none, 1=any, 2=E, 3=Z, 4=CIS, 5=TRANS
-        // Note: SDF Up/Down on single bonds are chirality indicators (wedge bonds),
-        // not E/Z stereo. Only encode stereo for double bonds.
-        feat[1] = if bond.order == BondOrder::Double {
-            match bond.stereo {
-                BondStereo::None => 0,
-                BondStereo::Up => 1, // E
-                BondStereo::Either => 2,
-                BondStereo::Down => 3, // Z
-            }
+        // Feature 1: Bond stereo, index into
+        // [STEREONONE, STEREOZ, STEREOE, STEREOCIS, STEREOTRANS, STEREOANY].
+        // Wedge flags (Up/Down) describe tetrahedral centers, not E/Z, so only an
+        // explicit "either" double bond is encoded (as STEREOANY).
+        feat[1] = if bond.order == BondOrder::Double && bond.stereo == BondStereo::Either {
+            5
         } else {
-            0 // Single bonds: wedge stereo is for chirality, not OGB bond stereo
+            0
         };
 
         // Feature 2: Is conjugated
@@ -328,12 +335,14 @@ mod tests {
         assert_eq!(feats.features.len(), 3);
 
         // O atom
-        assert_eq!(feats.features[0][0], 8); // Atomic number of O
+        assert_eq!(feats.features[0][0], 7); // O: Z - 1
         assert_eq!(feats.features[0][2], 2); // Degree 2
+        assert_eq!(feats.features[0][6], 2); // SP3
 
         // H atoms
-        assert_eq!(feats.features[1][0], 1); // Atomic number of H
+        assert_eq!(feats.features[1][0], 0); // H: Z - 1
         assert_eq!(feats.features[1][2], 1); // Degree 1
+        assert_eq!(feats.features[1][6], 5); // S hybridization → misc
     }
 
     #[test]
@@ -426,6 +435,70 @@ mod tests {
         mol.bonds.push(Bond::new(0, 1, BondOrder::Triple));
 
         let feats = ogb_atom_features(&mol);
-        assert_eq!(feats.features[0][6], 1); // SP = 1
+        assert_eq!(feats.features[0][6], 0); // SP = 0
+    }
+
+    #[test]
+    fn test_total_degree_includes_implicit_h() {
+        // Heavy-atom-only methanol: C has 1 explicit neighbor + 3 implicit H
+        let mut mol = Molecule::new("methanol");
+        mol.atoms.push(Atom::new(0, "C", 0.0, 0.0, 0.0));
+        mol.atoms.push(Atom::new(1, "O", 1.4, 0.0, 0.0));
+        mol.bonds.push(Bond::new(0, 1, BondOrder::Single));
+
+        let feats = ogb_atom_features(&mol);
+        assert_eq!(feats.features[0][2], 4); // total degree
+        assert_eq!(feats.features[0][4], 3); // num H
+        assert_eq!(feats.features[1][2], 2);
+        assert_eq!(feats.features[1][4], 1);
+    }
+
+    #[test]
+    fn test_out_of_range_values_use_misc_bucket() {
+        let mut mol = Molecule::new("odd");
+        let mut a = Atom::new(0, "Xx", 0.0, 0.0, 0.0);
+        a.formal_charge = 7;
+        mol.atoms.push(a);
+        mol.atoms.push(Atom::new(1, "C", 1.0, 0.0, 0.0));
+        mol.bonds.push(Bond::new(0, 1, BondOrder::Coordination));
+
+        let atoms = ogb_atom_features(&mol);
+        assert_eq!(atoms.features[0][0], 118); // unknown element → misc
+        assert_eq!(atoms.features[0][3], 11); // charge +7 → misc
+
+        let bonds = ogb_bond_features(&mol);
+        assert_eq!(bonds.features[0][0], 4); // coordination bond → misc
+    }
+
+    #[test]
+    fn test_features_within_ogb_dims() {
+        let atom_dims = [119, 5, 12, 12, 10, 6, 6, 2, 2];
+        let bond_dims = [5, 6, 2];
+        for mol in [make_water(), make_benzene()] {
+            for f in ogb_atom_features(&mol).features {
+                for (v, d) in f.iter().zip(atom_dims) {
+                    assert!((0..d).contains(v));
+                }
+            }
+            for f in ogb_bond_features(&mol).features {
+                for (v, d) in f.iter().zip(bond_dims) {
+                    assert!((0..d).contains(v));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_wedge_flags_on_double_bond_are_not_ez() {
+        let mut mol = Molecule::new("ethylene");
+        mol.atoms.push(Atom::new(0, "C", 0.0, 0.0, 0.0));
+        mol.atoms.push(Atom::new(1, "C", 1.3, 0.0, 0.0));
+        let mut b = Bond::new(0, 1, BondOrder::Double);
+        b.stereo = BondStereo::Up;
+        mol.bonds.push(b);
+        assert_eq!(ogb_bond_features(&mol).features[0][1], 0);
+
+        mol.bonds[0].stereo = BondStereo::Either;
+        assert_eq!(ogb_bond_features(&mol).features[0][1], 5); // STEREOANY
     }
 }

@@ -25,6 +25,7 @@ fn categorize_error(err: &SdfError) -> &'static str {
         SdfError::UnsupportedV3000Feature(_) => "UnsupportedV3000Feature",
         SdfError::GzipNotEnabled => "GzipNotEnabled",
         SdfError::BondInferenceError { .. } => "BondInferenceError",
+        SdfError::Unwritable(_) => "Unwritable",
     }
 }
 

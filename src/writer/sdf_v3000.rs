@@ -14,6 +14,8 @@ use crate::stereogroup::StereoGroupType;
 
 /// Writes a molecule to SDF V3000 format.
 pub fn write_sdf_v3000<W: Write>(writer: &mut W, molecule: &Molecule) -> Result<()> {
+    crate::writer::sdf::validate_atom_references(molecule)?;
+
     // Line 1: Molecule name
     writeln!(writer, "{}", molecule.name)?;
 
@@ -66,8 +68,8 @@ pub fn write_sdf_v3000<W: Write>(writer: &mut W, molecule: &Molecule) -> Result<
             }
         }
 
-        if atom.mass_difference != 0 {
-            extras.push_str(&format!(" MASS={}", atom.mass_difference));
+        if let Some(mass) = atom.isotope {
+            extras.push_str(&format!(" MASS={}", mass));
         }
 
         if let Some(val) = atom.valence {
@@ -219,12 +221,7 @@ pub fn write_sdf_v3000<W: Write>(writer: &mut W, molecule: &Molecule) -> Result<
     // M  END
     writeln!(writer, "M  END")?;
 
-    // Data block (properties)
-    for (key, value) in &molecule.properties {
-        writeln!(writer, "> <{}>", key)?;
-        writeln!(writer, "{}", value)?;
-        writeln!(writer)?;
-    }
+    crate::writer::sdf::write_data_items(writer, molecule)?;
 
     // Record separator
     writeln!(writer, "$$$$")?;
@@ -269,7 +266,10 @@ pub fn write_sdf_v3000_file_multi<P: AsRef<std::path::Path>>(
 /// Uses V3000 format if the molecule requires it (>999 atoms/bonds,
 /// V3000-specific features), otherwise uses V2000.
 pub fn write_sdf_auto<W: Write>(writer: &mut W, molecule: &Molecule) -> Result<()> {
-    if molecule.needs_v3000() || molecule.format_version == SdfFormat::V3000 {
+    if molecule.needs_v3000()
+        || molecule.format_version == SdfFormat::V3000
+        || crate::writer::sdf::v2000_limitation(molecule).is_some()
+    {
         write_sdf_v3000(writer, molecule)
     } else {
         crate::writer::write_sdf(writer, molecule)

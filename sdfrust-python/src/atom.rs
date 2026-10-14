@@ -96,7 +96,49 @@ impl PyAtom {
         self.inner.formal_charge = charge;
     }
 
-    /// The mass difference from monoisotopic mass (-3 to +4).
+    /// Isotope mass number (e.g. 13 for carbon-13), or None for natural abundance.
+    #[getter]
+    pub fn isotope(&self) -> Option<u16> {
+        self.inner.isotope
+    }
+
+    /// Set the isotope mass number (None for natural abundance).
+    #[setter]
+    pub fn set_isotope(&mut self, isotope: Option<u16>) {
+        self.inner.isotope = isotope;
+    }
+
+    /// Partial charge read from the file (e.g. MOL2), or None.
+    #[getter]
+    pub fn partial_charge(&self) -> Option<f64> {
+        self.inner.partial_charge
+    }
+
+    /// Set the partial charge.
+    #[setter]
+    pub fn set_partial_charge(&mut self, charge: Option<f64>) {
+        self.inner.partial_charge = charge;
+    }
+
+    /// MDL radical code (1 = singlet, 2 = doublet, 3 = triplet), or None.
+    #[getter]
+    pub fn radical(&self) -> Option<u8> {
+        self.inner.radical
+    }
+
+    /// Set the MDL radical code.
+    #[setter]
+    pub fn set_radical(&mut self, radical: Option<u8>) {
+        self.inner.radical = radical;
+    }
+
+    /// Number of unpaired electrons implied by the radical code.
+    #[getter]
+    pub fn radical_electrons(&self) -> u8 {
+        self.inner.radical_electrons()
+    }
+
+    /// V2000 atom-block mass difference (-3 to +4); prefer `isotope`.
     #[getter]
     pub fn mass_difference(&self) -> i8 {
         self.inner.mass_difference

@@ -50,82 +50,82 @@ EXAMPLE_MOL_FILES = [
 
 
 # ============================================================
-# OGB feature encoding helpers (matches ogb.utils.features)
+# OGB reference encoding
 # ============================================================
+# Use the ogb package itself (``pip install --no-deps ogb``) so the comparison is
+# against the real AtomEncoder/BondEncoder input convention. If ogb is not
+# installed, fall back to a verbatim copy of ogb.utils.features (ogb 1.3.6).
+
+try:
+    from ogb.utils.features import atom_to_feature_vector, bond_to_feature_vector
+except ImportError:
+    _OGB_FEATURES = {
+        "possible_atomic_num_list": list(range(1, 119)) + ["misc"],
+        "possible_chirality_list": ["CHI_UNSPECIFIED", "CHI_TETRAHEDRAL_CW",
+                                    "CHI_TETRAHEDRAL_CCW", "CHI_OTHER", "misc"],
+        "possible_degree_list": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, "misc"],
+        "possible_formal_charge_list": [-5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, "misc"],
+        "possible_numH_list": [0, 1, 2, 3, 4, 5, 6, 7, 8, "misc"],
+        "possible_number_radical_e_list": [0, 1, 2, 3, 4, "misc"],
+        "possible_hybridization_list": ["SP", "SP2", "SP3", "SP3D", "SP3D2", "misc"],
+        "possible_is_aromatic_list": [False, True],
+        "possible_is_in_ring_list": [False, True],
+        "possible_bond_type_list": ["SINGLE", "DOUBLE", "TRIPLE", "AROMATIC", "misc"],
+        "possible_bond_stereo_list": ["STEREONONE", "STEREOZ", "STEREOE",
+                                      "STEREOCIS", "STEREOTRANS", "STEREOANY"],
+        "possible_is_conjugated_list": [False, True],
+    }
+
+    def _safe_index(values, e):
+        try:
+            return values.index(e)
+        except ValueError:
+            return len(values) - 1
+
+    def atom_to_feature_vector(atom):
+        f = _OGB_FEATURES
+        return [
+            _safe_index(f["possible_atomic_num_list"], atom.GetAtomicNum()),
+            _safe_index(f["possible_chirality_list"], str(atom.GetChiralTag())),
+            _safe_index(f["possible_degree_list"], atom.GetTotalDegree()),
+            _safe_index(f["possible_formal_charge_list"], atom.GetFormalCharge()),
+            _safe_index(f["possible_numH_list"], atom.GetTotalNumHs()),
+            _safe_index(f["possible_number_radical_e_list"], atom.GetNumRadicalElectrons()),
+            _safe_index(f["possible_hybridization_list"], str(atom.GetHybridization())),
+            f["possible_is_aromatic_list"].index(atom.GetIsAromatic()),
+            f["possible_is_in_ring_list"].index(atom.IsInRing()),
+        ]
+
+    def bond_to_feature_vector(bond):
+        f = _OGB_FEATURES
+        return [
+            _safe_index(f["possible_bond_type_list"], str(bond.GetBondType())),
+            f["possible_bond_stereo_list"].index(str(bond.GetStereo())),
+            f["possible_is_conjugated_list"].index(bond.GetIsConjugated()),
+        ]
+
 
 def rdkit_atom_to_ogb_features(atom):
-    """Compute OGB 9-feature vector for an RDKit atom (matches ogb.utils.features.atom_to_feature_vector)."""
-    # Feature 0: Atomic number
-    atomic_num = atom.GetAtomicNum()
-
-    # Feature 1: Chirality tag
-    chiral_map = {
-        Chem.rdchem.ChiralType.CHI_UNSPECIFIED: 0,
-        Chem.rdchem.ChiralType.CHI_TETRAHEDRAL_CW: 1,
-        Chem.rdchem.ChiralType.CHI_TETRAHEDRAL_CCW: 2,
-        Chem.rdchem.ChiralType.CHI_OTHER: 3,
-    }
-    chirality = chiral_map.get(atom.GetChiralTag(), 0)
-
-    # Feature 2: Degree
-    degree = atom.GetDegree()
-
-    # Feature 3: Formal charge (shifted by +5)
-    formal_charge = atom.GetFormalCharge() + 5
-
-    # Feature 4: Number of Hs (total)
-    num_hs = atom.GetTotalNumHs()
-
-    # Feature 5: Number of radical electrons
-    num_radical = atom.GetNumRadicalElectrons()
-
-    # Feature 6: Hybridization
-    hyb_map = {
-        Chem.rdchem.HybridizationType.S: 0,
-        Chem.rdchem.HybridizationType.SP: 1,
-        Chem.rdchem.HybridizationType.SP2: 2,
-        Chem.rdchem.HybridizationType.SP3: 3,
-        Chem.rdchem.HybridizationType.SP3D: 4,
-        Chem.rdchem.HybridizationType.SP3D2: 5,
-    }
-    hybridization = hyb_map.get(atom.GetHybridization(), 0)
-
-    # Feature 7: Is aromatic
-    is_aromatic = int(atom.GetIsAromatic())
-
-    # Feature 8: Is in ring
-    is_in_ring = int(atom.IsInRing())
-
-    return [atomic_num, chirality, degree, formal_charge, num_hs,
-            num_radical, hybridization, is_aromatic, is_in_ring]
+    """OGB 9-feature vector for an RDKit atom (ogb.utils.features.atom_to_feature_vector)."""
+    return atom_to_feature_vector(atom)
 
 
-def rdkit_bond_to_ogb_features(bond, mol):
-    """Compute OGB 3-feature vector for an RDKit bond."""
-    # Feature 0: Bond type
-    bond_type_map = {
-        Chem.rdchem.BondType.SINGLE: 0,
-        Chem.rdchem.BondType.DOUBLE: 1,
-        Chem.rdchem.BondType.TRIPLE: 2,
-        Chem.rdchem.BondType.AROMATIC: 3,
-    }
-    bond_type = bond_type_map.get(bond.GetBondType(), 0)
+def rdkit_bond_to_ogb_features(bond, mol=None):
+    """OGB 3-feature vector for an RDKit bond (ogb.utils.features.bond_to_feature_vector)."""
+    return bond_to_feature_vector(bond)
 
-    # Feature 1: Bond stereo
-    stereo_map = {
-        Chem.rdchem.BondStereo.STEREONONE: 0,
-        Chem.rdchem.BondStereo.STEREOANY: 1,
-        Chem.rdchem.BondStereo.STEREOZ: 2,
-        Chem.rdchem.BondStereo.STEREOE: 3,
-        Chem.rdchem.BondStereo.STEREOCIS: 4,
-        Chem.rdchem.BondStereo.STEREOTRANS: 5,
-    }
-    stereo = stereo_map.get(bond.GetStereo(), 0)
 
-    # Feature 2: Is conjugated
-    is_conjugated = int(bond.GetIsConjugated())
-
-    return [bond_type, stereo, is_conjugated]
+def _check_atom_feature(name, sdf_mol, rdkit_mol, k, label):
+    """Compare OGB atom feature column k against the reference encoding."""
+    sdf_feats = sdf_mol.ogb_atom_features()
+    mismatches = []
+    for i in range(sdf_mol.num_atoms):
+        atom = rdkit_mol.GetAtomWithIdx(i)
+        ref = rdkit_atom_to_ogb_features(atom)[k]
+        if sdf_feats[i][k] != ref:
+            mismatches.append(f"  atom {i} ({atom.GetSymbol()}): sdfrust={sdf_feats[i][k]} ogb={ref}")
+    if mismatches:
+        pytest.fail(f"{name} {label} mismatches:\n" + "\n".join(mismatches))
 
 
 def load_both(sdf_path):
@@ -206,116 +206,36 @@ class TestOGBAtomFeatures:
             f"{name}: atom count mismatch"
 
     def test_atomic_number(self, molecule_pair):
-        """Feature 0: Atomic number should match exactly."""
-        name, sdf_mol, rdkit_mol = molecule_pair
-        sdf_feats = sdf_mol.ogb_atom_features()
-        for i in range(sdf_mol.num_atoms):
-            rdkit_num = rdkit_mol.GetAtomWithIdx(i).GetAtomicNum()
-            sdf_num = sdf_feats[i][0]
-            assert sdf_num == rdkit_num, \
-                f"{name} atom {i}: atomic_num sdfrust={sdf_num} rdkit={rdkit_num}"
-
-    def test_degree(self, molecule_pair):
-        """Feature 2: Degree should match exactly."""
-        name, sdf_mol, rdkit_mol = molecule_pair
-        sdf_feats = sdf_mol.ogb_atom_features()
-        for i in range(sdf_mol.num_atoms):
-            rdkit_deg = rdkit_mol.GetAtomWithIdx(i).GetDegree()
-            sdf_deg = sdf_feats[i][2]
-            assert sdf_deg == rdkit_deg, \
-                f"{name} atom {i}: degree sdfrust={sdf_deg} rdkit={rdkit_deg}"
-
-    def test_formal_charge(self, molecule_pair):
-        """Feature 3: Formal charge (+5 shift) should match exactly."""
-        name, sdf_mol, rdkit_mol = molecule_pair
-        sdf_feats = sdf_mol.ogb_atom_features()
-        for i in range(sdf_mol.num_atoms):
-            rdkit_charge = rdkit_mol.GetAtomWithIdx(i).GetFormalCharge() + 5
-            sdf_charge = sdf_feats[i][3]
-            assert sdf_charge == rdkit_charge, \
-                f"{name} atom {i}: charge sdfrust={sdf_charge} rdkit={rdkit_charge}"
-
-    def test_num_hs(self, molecule_pair):
-        """Feature 4: Total H count should match exactly."""
-        name, sdf_mol, rdkit_mol = molecule_pair
-        sdf_feats = sdf_mol.ogb_atom_features()
-        for i in range(sdf_mol.num_atoms):
-            rdkit_hs = rdkit_mol.GetAtomWithIdx(i).GetTotalNumHs()
-            sdf_hs = sdf_feats[i][4]
-            assert sdf_hs == rdkit_hs, \
-                f"{name} atom {i}: num_hs sdfrust={sdf_hs} rdkit={rdkit_hs}"
-
-    def test_hybridization(self, molecule_pair):
-        """Feature 6: Hybridization should match."""
-        name, sdf_mol, rdkit_mol = molecule_pair
-        sdf_feats = sdf_mol.ogb_atom_features()
-        hyb_map = {
-            Chem.rdchem.HybridizationType.S: 0,
-            Chem.rdchem.HybridizationType.SP: 1,
-            Chem.rdchem.HybridizationType.SP2: 2,
-            Chem.rdchem.HybridizationType.SP3: 3,
-            Chem.rdchem.HybridizationType.SP3D: 4,
-            Chem.rdchem.HybridizationType.SP3D2: 5,
-        }
-        mismatches = []
-        for i in range(sdf_mol.num_atoms):
-            rdkit_hyb = hyb_map.get(rdkit_mol.GetAtomWithIdx(i).GetHybridization(), 0)
-            sdf_hyb = sdf_feats[i][6]
-            if sdf_hyb != rdkit_hyb:
-                elem = rdkit_mol.GetAtomWithIdx(i).GetSymbol()
-                mismatches.append(f"  atom {i} ({elem}): sdfrust={sdf_hyb} rdkit={rdkit_hyb}")
-        if mismatches:
-            pytest.fail(f"{name} hybridization mismatches:\n" + "\n".join(mismatches))
-
-    def test_is_aromatic(self, molecule_pair):
-        """Feature 7: Aromaticity should match."""
-        name, sdf_mol, rdkit_mol = molecule_pair
-        sdf_feats = sdf_mol.ogb_atom_features()
-        mismatches = []
-        for i in range(sdf_mol.num_atoms):
-            rdkit_arom = int(rdkit_mol.GetAtomWithIdx(i).GetIsAromatic())
-            sdf_arom = sdf_feats[i][7]
-            if sdf_arom != rdkit_arom:
-                elem = rdkit_mol.GetAtomWithIdx(i).GetSymbol()
-                mismatches.append(f"  atom {i} ({elem}): sdfrust={sdf_arom} rdkit={rdkit_arom}")
-        if mismatches:
-            pytest.fail(f"{name} aromaticity mismatches:\n" + "\n".join(mismatches))
-
-    def test_is_in_ring(self, molecule_pair):
-        """Feature 8: Ring membership should match."""
-        name, sdf_mol, rdkit_mol = molecule_pair
-        sdf_feats = sdf_mol.ogb_atom_features()
-        mismatches = []
-        for i in range(sdf_mol.num_atoms):
-            rdkit_ring = int(rdkit_mol.GetAtomWithIdx(i).IsInRing())
-            sdf_ring = sdf_feats[i][8]
-            if sdf_ring != rdkit_ring:
-                elem = rdkit_mol.GetAtomWithIdx(i).GetSymbol()
-                mismatches.append(f"  atom {i} ({elem}): sdfrust={sdf_ring} rdkit={rdkit_ring}")
-        if mismatches:
-            pytest.fail(f"{name} ring membership mismatches:\n" + "\n".join(mismatches))
+        """Feature 0: atomic number index (Z - 1)."""
+        _check_atom_feature(*molecule_pair, 0, "atomic_num")
 
     def test_chirality(self, molecule_pair):
-        """Feature 1: Chirality tag should match RDKit (CIP-based perception)."""
-        name, sdf_mol, rdkit_mol = molecule_pair
-        sdf_feats = sdf_mol.ogb_atom_features()
-        chiral_map = {
-            Chem.rdchem.ChiralType.CHI_UNSPECIFIED: 0,
-            Chem.rdchem.ChiralType.CHI_TETRAHEDRAL_CW: 1,
-            Chem.rdchem.ChiralType.CHI_TETRAHEDRAL_CCW: 2,
-            Chem.rdchem.ChiralType.CHI_OTHER: 3,
-        }
-        mismatches = []
-        for i in range(sdf_mol.num_atoms):
-            rdkit_chiral = chiral_map.get(rdkit_mol.GetAtomWithIdx(i).GetChiralTag(), 0)
-            sdf_chiral = sdf_feats[i][1]
-            if sdf_chiral != rdkit_chiral:
-                elem = rdkit_mol.GetAtomWithIdx(i).GetSymbol()
-                mismatches.append(
-                    f"  atom {i} ({elem}): sdfrust={sdf_chiral} rdkit={rdkit_chiral}"
-                )
-        if mismatches:
-            pytest.fail(f"{name} chirality mismatches:\n" + "\n".join(mismatches))
+        """Feature 1: chirality tag."""
+        _check_atom_feature(*molecule_pair, 1, "chirality")
+
+    def test_degree(self, molecule_pair):
+        """Feature 2: total degree (including implicit H)."""
+        _check_atom_feature(*molecule_pair, 2, "degree")
+
+    def test_formal_charge(self, molecule_pair):
+        """Feature 3: formal charge index."""
+        _check_atom_feature(*molecule_pair, 3, "formal_charge")
+
+    def test_num_hs(self, molecule_pair):
+        """Feature 4: total H count."""
+        _check_atom_feature(*molecule_pair, 4, "num_hs")
+
+    def test_hybridization(self, molecule_pair):
+        """Feature 6: hybridization index (SP=0 ... SP3D2=4, misc=5)."""
+        _check_atom_feature(*molecule_pair, 6, "hybridization")
+
+    def test_is_aromatic(self, molecule_pair):
+        """Feature 7: aromaticity."""
+        _check_atom_feature(*molecule_pair, 7, "aromatic")
+
+    def test_is_in_ring(self, molecule_pair):
+        """Feature 8: ring membership."""
+        _check_atom_feature(*molecule_pair, 8, "in_ring")
 
     def test_full_ogb_atom_features(self, molecule_pair):
         """Full comparison of all 9 OGB atom features."""
@@ -400,7 +320,7 @@ class TestOGBBondFeatures:
         mismatches = []
         for i in range(sdf_mol.num_bonds):
             rdkit_bond = rdkit_mol.GetBondWithIdx(i)
-            rdkit_feat = rdkit_bond_to_ogb_features(rdkit_bond, rdkit_mol)
+            rdkit_feat = rdkit_bond_to_ogb_features(rdkit_bond)
             for j in range(3):
                 if sdf_feats[i][j] != rdkit_feat[j]:
                     a1, a2 = rdkit_bond.GetBeginAtomIdx(), rdkit_bond.GetEndAtomIdx()
@@ -723,7 +643,7 @@ class TestDrugLibrary:
         mismatches = []
         for i in range(sdf_mol.num_bonds):
             rdkit_bond = rdkit_mol.GetBondWithIdx(i)
-            rdkit_feat = rdkit_bond_to_ogb_features(rdkit_bond, rdkit_mol)
+            rdkit_feat = rdkit_bond_to_ogb_features(rdkit_bond)
             for j in range(3):
                 if sdf_feats[i][j] != rdkit_feat[j]:
                     a1, a2 = rdkit_bond.GetBeginAtomIdx(), rdkit_bond.GetEndAtomIdx()

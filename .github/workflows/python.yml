@@ -32,7 +32,9 @@ jobs:
         run: |
           uv venv .venv --python ${{ matrix.python-version }}
           source .venv/bin/activate
-          uv pip install maturin pytest numpy
+          uv pip install maturin pytest numpy rdkit
+          # ogb's feature encoders are pure Python; skip its torch dependency
+          uv pip install --no-deps ogb
       - name: Build and install
         working-directory: sdfrust-python
         run: |

@@ -43,16 +43,16 @@ pub enum Hybridization {
 }
 
 impl Hybridization {
-    /// Returns the OGB-compatible integer index (0-5 for S through SP3D2, 6 for Other).
+    /// Returns the index into OGB's hybridization list
+    /// `[SP, SP2, SP3, SP3D, SP3D2, misc]`; `S` and `Other` map to misc (5).
     pub fn to_ogb_index(&self) -> u8 {
         match self {
-            Hybridization::S => 0,
-            Hybridization::SP => 1,
-            Hybridization::SP2 => 2,
-            Hybridization::SP3 => 3,
-            Hybridization::SP3D => 4,
-            Hybridization::SP3D2 => 5,
-            Hybridization::Other => 6,
+            Hybridization::SP => 0,
+            Hybridization::SP2 => 1,
+            Hybridization::SP3 => 2,
+            Hybridization::SP3D => 3,
+            Hybridization::SP3D2 => 4,
+            Hybridization::S | Hybridization::Other => 5,
         }
     }
 }
@@ -300,13 +300,13 @@ mod tests {
 
     #[test]
     fn test_ogb_index() {
-        assert_eq!(Hybridization::S.to_ogb_index(), 0);
-        assert_eq!(Hybridization::SP.to_ogb_index(), 1);
-        assert_eq!(Hybridization::SP2.to_ogb_index(), 2);
-        assert_eq!(Hybridization::SP3.to_ogb_index(), 3);
-        assert_eq!(Hybridization::SP3D.to_ogb_index(), 4);
-        assert_eq!(Hybridization::SP3D2.to_ogb_index(), 5);
-        assert_eq!(Hybridization::Other.to_ogb_index(), 6);
+        assert_eq!(Hybridization::SP.to_ogb_index(), 0);
+        assert_eq!(Hybridization::SP2.to_ogb_index(), 1);
+        assert_eq!(Hybridization::SP3.to_ogb_index(), 2);
+        assert_eq!(Hybridization::SP3D.to_ogb_index(), 3);
+        assert_eq!(Hybridization::SP3D2.to_ogb_index(), 4);
+        assert_eq!(Hybridization::S.to_ogb_index(), 5);
+        assert_eq!(Hybridization::Other.to_ogb_index(), 5);
     }
 
     #[test]

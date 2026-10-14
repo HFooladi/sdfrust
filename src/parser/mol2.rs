@@ -23,11 +23,30 @@ fn mol2_bond_type_to_order(bond_type: &str) -> BondOrder {
         "1" | "1n" => BondOrder::Single,
         "2" => BondOrder::Double,
         "3" => BondOrder::Triple,
-        "ar" | "am" => BondOrder::Aromatic,
+        "ar" => BondOrder::Aromatic,
+        "am" => BondOrder::Single, // Amide: a single bond with partial double character
         "du" => BondOrder::Single, // Dummy bond
         "un" => BondOrder::Single, // Unknown, treat as single
         "nc" => BondOrder::Single, // Not connected, treat as single
         _ => BondOrder::Single,    // Default to single
+    }
+}
+
+/// Extracts and normalizes the element from a SYBYL atom type
+/// (e.g. "C.ar" → "C", "CL" → "Cl"). Pseudo-atoms (Du, LP, Any, ...) are kept as-is.
+fn element_from_atom_type(atom_type: &str) -> String {
+    let symbol = atom_type.split('.').next().unwrap_or(atom_type);
+    match symbol {
+        "Du" | "LP" | "Lp" | "Any" | "Hal" | "Het" | "Hev" => symbol.to_string(),
+        _ => {
+            let mut chars = symbol.chars();
+            match chars.next() {
+                Some(first) => {
+                    first.to_ascii_uppercase().to_string() + &chars.as_str().to_ascii_lowercase()
+                }
+                None => String::new(),
+            }
+        }
     }
 }
 
@@ -138,16 +157,18 @@ impl<R: BufRead> Mol2Parser<R> {
             return Err(SdfError::MissingSection("MOLECULE type".to_string()));
         }
 
-        // Line 4: charge type (optional, skip)
+        // Line 4: charge type
         if !self.read_line()? {
             return Err(SdfError::MissingSection("MOLECULE charge type".to_string()));
         }
+        let has_charges = !self.current_line.trim().eq_ignore_ascii_case("NO_CHARGES");
 
         // Skip remaining lines until next section
         // (status bits, comment, etc.)
 
-        let mut atoms = Vec::with_capacity(num_atoms);
-        let mut bonds = Vec::with_capacity(num_bonds);
+        let mut atoms = Vec::new();
+        let mut atom_ids: HashMap<String, usize> = HashMap::new();
+        let mut bonds = Vec::new();
         let properties = HashMap::new();
 
         // Parse sections until we hit another MOLECULE or EOF
@@ -161,10 +182,10 @@ impl<R: BufRead> Mol2Parser<R> {
 
                     match section.as_str() {
                         "ATOM" => {
-                            atoms = self.parse_atom_section(num_atoms)?;
+                            (atoms, atom_ids) = self.parse_atom_section(num_atoms, has_charges)?;
                         }
                         "BOND" => {
-                            bonds = self.parse_bond_section(num_bonds, atoms.len())?;
+                            bonds = self.parse_bond_section(num_bonds, &atom_ids)?;
                         }
                         "SUBSTRUCTURE" | "COMMENT" | "HEADTAIL" | "SET" | "DICT" | "EXTENSION" => {
                             // Skip these sections
@@ -205,8 +226,14 @@ impl<R: BufRead> Mol2Parser<R> {
     }
 
     /// Parses the ATOM section.
-    fn parse_atom_section(&mut self, expected_count: usize) -> Result<Vec<Atom>> {
-        let mut atoms = Vec::with_capacity(expected_count);
+    fn parse_atom_section(
+        &mut self,
+        expected_count: usize,
+        has_charges: bool,
+    ) -> Result<(Vec<Atom>, HashMap<String, usize>)> {
+        let prealloc = expected_count.min(super::sdf::MAX_PREALLOC);
+        let mut atoms = Vec::with_capacity(prealloc);
+        let mut atom_ids = HashMap::with_capacity(prealloc);
 
         for i in 0..expected_count {
             if !self.read_line()? {
@@ -225,16 +252,28 @@ impl<R: BufRead> Mol2Parser<R> {
                 });
             }
 
-            let atom = self.parse_atom_line(i)?;
+            let atom = self.parse_atom_line(i, has_charges)?;
+            let id = self
+                .current_line
+                .split_whitespace()
+                .next()
+                .unwrap_or_default()
+                .to_string();
+            if atom_ids.insert(id.clone(), i).is_some() {
+                return Err(SdfError::Parse {
+                    line: self.line_number,
+                    message: format!("Duplicate MOL2 atom id: {}", id),
+                });
+            }
             atoms.push(atom);
         }
 
-        Ok(atoms)
+        Ok((atoms, atom_ids))
     }
 
     /// Parses a single atom line.
     /// Format: atom_id atom_name x y z atom_type [subst_id [subst_name [charge [status_bit]]]]
-    fn parse_atom_line(&self, index: usize) -> Result<Atom> {
+    fn parse_atom_line(&self, index: usize, has_charges: bool) -> Result<Atom> {
         let parts: Vec<&str> = self.current_line.split_whitespace().collect();
 
         if parts.len() < 6 {
@@ -267,17 +306,21 @@ impl<R: BufRead> Mol2Parser<R> {
 
         // Extract element from atom_type (e.g., "C.3" -> "C", "N.ar" -> "N")
         let atom_type = parts[5];
-        let element = atom_type.split('.').next().unwrap_or(atom_type).to_string();
+        let element = element_from_atom_type(atom_type);
 
-        // Parse partial charge if present
-        let partial_charge: f64 = if parts.len() > 8 {
-            parts[8].parse().unwrap_or(0.0)
+        // Partial charge (kept separate: it is not a formal charge)
+        let partial_charge: Option<f64> = if has_charges && parts.len() > 8 {
+            Some(parts[8].parse().map_err(|_| SdfError::Parse {
+                line: self.line_number,
+                message: format!("Invalid partial charge: {}", parts[8]),
+            })?)
         } else {
-            0.0
+            None
         };
 
-        // Round partial charge to formal charge (rough approximation)
-        let formal_charge = partial_charge.round() as i8;
+        // MOL2 has no formal-charge column; the only unambiguous case is the
+        // positively charged sp3 nitrogen type.
+        let formal_charge = if atom_type == "N.4" { 1 } else { 0 };
 
         Ok(Atom {
             index,
@@ -287,6 +330,8 @@ impl<R: BufRead> Mol2Parser<R> {
             z,
             formal_charge,
             mass_difference: 0,
+            isotope: None,
+            partial_charge,
             stereo_parity: None,
             hydrogen_count: None,
             valence: None,
@@ -301,9 +346,9 @@ impl<R: BufRead> Mol2Parser<R> {
     fn parse_bond_section(
         &mut self,
         expected_count: usize,
-        atom_count: usize,
+        atom_ids: &HashMap<String, usize>,
     ) -> Result<Vec<Bond>> {
-        let mut bonds = Vec::with_capacity(expected_count);
+        let mut bonds = Vec::with_capacity(expected_count.min(super::sdf::MAX_PREALLOC));
 
         for i in 0..expected_count {
             if !self.read_line()? {
@@ -322,7 +367,7 @@ impl<R: BufRead> Mol2Parser<R> {
                 });
             }
 
-            let bond = self.parse_bond_line(atom_count)?;
+            let bond = self.parse_bond_line(atom_ids)?;
             bonds.push(bond);
         }
 
@@ -331,7 +376,7 @@ impl<R: BufRead> Mol2Parser<R> {
 
     /// Parses a single bond line.
     /// Format: bond_id origin_atom_id target_atom_id bond_type [status_bits]
-    fn parse_bond_line(&self, atom_count: usize) -> Result<Bond> {
+    fn parse_bond_line(&self, atom_ids: &HashMap<String, usize>) -> Result<Bond> {
         let parts: Vec<&str> = self.current_line.split_whitespace().collect();
 
         if parts.len() < 4 {
@@ -342,47 +387,19 @@ impl<R: BufRead> Mol2Parser<R> {
         }
 
         // parts[0] = bond_id (ignored)
-        // parts[1] = origin_atom_id (1-based)
-        // parts[2] = target_atom_id (1-based)
-        // parts[3] = bond_type
-
-        let atom1: usize = parts[1]
-            .parse::<usize>()
-            .map_err(|_| SdfError::Parse {
-                line: self.line_number,
-                message: "Invalid atom1 index".to_string(),
-            })?
-            .checked_sub(1)
-            .ok_or(SdfError::InvalidAtomIndex {
-                index: 0,
-                atom_count,
-            })?;
-
-        let atom2: usize = parts[2]
-            .parse::<usize>()
-            .map_err(|_| SdfError::Parse {
-                line: self.line_number,
-                message: "Invalid atom2 index".to_string(),
-            })?
-            .checked_sub(1)
-            .ok_or(SdfError::InvalidAtomIndex {
-                index: 0,
-                atom_count,
-            })?;
-
-        // Validate atom indices
-        if atom1 >= atom_count {
-            return Err(SdfError::InvalidAtomIndex {
-                index: atom1 + 1,
-                atom_count,
-            });
-        }
-        if atom2 >= atom_count {
-            return Err(SdfError::InvalidAtomIndex {
-                index: atom2 + 1,
-                atom_count,
-            });
-        }
+        // parts[1] = origin_atom_id, parts[2] = target_atom_id (atom ids, which
+        // need not be contiguous), parts[3] = bond_type
+        let resolve = |id: &str| {
+            atom_ids
+                .get(id)
+                .copied()
+                .ok_or_else(|| SdfError::InvalidAtomIndex {
+                    index: id.parse().unwrap_or(0),
+                    atom_count: atom_ids.len(),
+                })
+        };
+        let atom1 = resolve(parts[1])?;
+        let atom2 = resolve(parts[2])?;
 
         let bond_type = parts[3].to_lowercase();
         let order = mol2_bond_type_to_order(&bond_type);
@@ -443,7 +460,11 @@ impl<R: BufRead> Iterator for Mol2Iterator<R> {
                 None
             }
             Err(e) => {
-                self.finished = true;
+                // The next call skips ahead to the next @<TRIPOS>MOLECULE, so only
+                // I/O errors end the iteration.
+                if matches!(e, SdfError::Io(_)) {
+                    self.finished = true;
+                }
                 Some(Err(e))
             }
         }

@@ -7,6 +7,77 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - Unreleased
+
+Correctness release. Every change below was found by a differential comparison
+against RDKit 2025.09, OpenBabel 3.1 and the `ogb` package
+(`sdfrust-python/benchmarks/compare_tools.py`); each has a regression test.
+
+### Changed (breaking)
+
+- **OGB features now use the real `ogb.utils.features` encoding.** Values were
+  previously raw values on a different scale, which is incompatible with OGB's
+  `AtomEncoder`/`BondEncoder`. Models trained on 0.6 features must be retrained.
+  - atomic number is `Z - 1` (misc = 118)
+  - hybridization is `[SP, SP2, SP3, SP3D, SP3D2, misc]` (S → misc)
+  - degree is total degree including implicit H
+  - radicals are counted as electrons
+  - bond stereo uses `[NONE, Z, E, CIS, TRANS, ANY]` (wedge flags are no longer read as E/Z)
+  - out-of-range values go to the `misc` bucket
+- `Hybridization::to_ogb_index()` returns OGB indices (SP = 0 … SP3D2 = 4, S/Other = 5).
+- MOL2: bond type `am` (amide) is now `Single`, not `Aromatic`.
+- MOL2: partial charges are stored in the new `Atom::partial_charge` instead of
+  being rounded into `formal_charge`. `N.4` atoms get formal charge +1.
+- Isotopes from `M  ISO` / V3000 `MASS=` are stored as absolute mass numbers in the
+  new `Atom::isotope: Option<u16>`. Previously they went into `mass_difference: i8`,
+  which also corrupted masses ≥ 128. `mass_difference` now only holds the V2000
+  atom-block column.
+- `write_sdf` (V2000) returns `SdfError::Unwritable` for molecules it cannot
+  represent: more than 999 atoms/bonds, coordinates beyond ±9999.9999, or long atom
+  symbols. It previously wrote a corrupt file. `write_sdf_auto` falls back to V3000
+  in these cases.
+- Writers return `SdfError::InvalidAtomIndex` for bonds or groups that reference
+  missing atoms. They previously panicked or wrote invalid files.
+- `MaybeGzReader::Gzip` wraps `MultiGzDecoder`.
+
+### Fixed
+
+- `parse_sdf_*` / `iter_sdf_file` silently returned an empty molecule for V3000
+  records. V3000 records are now detected per record, so mixed V2000/V3000 files
+  parse correctly.
+- A trailing blank line after the final `$$$$` made `*_multi` fail on the whole file.
+- Iterators (SDF V2000/V3000, MOL2) now resume at the next record after a malformed
+  one, instead of stopping, as the crate docs described.
+- Panics on non-ASCII text in V2000 fixed-width lines. Invalid UTF-8 (e.g. Latin-1
+  property values) is now replaced instead of aborting the file.
+- Huge declared atom counts no longer abort with an allocation failure.
+- A missing `M  END` no longer swallows the following record(s).
+- V2000 charges: all nonzero charges are written to `M  CHG`. The parser lets
+  `M  CHG`/`M  RAD` supersede atom-block charges, as the CTfile spec requires.
+  Previously a molecule with a +1 and a +4 charge lost the +1 when read by RDKit.
+- Radicals: atom-block charge code 4 and `M  RAD` are parsed and `M  RAD` is
+  written. Radicals no longer force V3000 output.
+- `M  CHG`/`M  ISO` were written using `atom.index` instead of the atom's position.
+- Data items now end at a blank line. Property output is sorted by name, so it is
+  deterministic.
+- MOL2: non-contiguous atom ids are resolved through an id map; element case is
+  normalized (`CL` → `Cl`); `NO_CHARGES` is honored.
+- XYZ: atomic numbers 1–118 are supported (previously ~25 elements).
+- `ecfp(n_bits = 0)` no longer panics (returns an empty fingerprint; Python raises
+  `ValueError`). Python `Molecule.add_bond` raises `IndexError` for bad atom indices.
+- Gzip: multi-member (concatenated / bgzip) files are read completely.
+
+### Added
+
+- `Atom::isotope`, `Atom::partial_charge`, `Atom::radical_electrons()`. Python
+  `Atom` exposes `isotope`, `partial_charge`, `radical` and `radical_electrons`.
+- `SdfParser::skip_to_record_end()`, `SdfV3000Parser::skip_to_record_end()`.
+- `sdfrust-python/benchmarks/compare_tools.py`: a differential comparison harness
+  against RDKit, OpenBabel and OGB, with Markdown/JSON reports.
+- `tests/regression_tests.rs` and `sdfrust-python/tests/test_regressions.py`.
+- The Python OGB validation tests compare against `ogb.utils.features` itself, and
+  CI installs RDKit and OGB so they run.
+
 ## [0.6.0] - 2026-02-19
 
 ### Added

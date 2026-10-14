@@ -99,7 +99,7 @@ Each parser follows the same pattern: `Parser<R: BufRead>` for streaming + `Iter
 - `descriptors::is_conjugated_bond(mol, idx)` / `all_conjugated_bonds(mol)` — conjugation
 - `descriptors::gasteiger_charges(mol)` — partial charges (PEOE)
 - `descriptors::atom_chirality(mol, idx)` / `all_chiralities(mol)` — CIP R/S chirality
-- `featurize::ogb::ogb_atom_features(mol)` — [N, 9] OGB atom features (all 9 match RDKit)
+- `featurize::ogb::ogb_atom_features(mol)` — [N, 9] OGB atom features (indices into `ogb.utils.features`, validated against the `ogb` package)
 - `featurize::ogb::ogb_bond_features(mol)` — [E, 3] OGB bond features
 - `featurize::ogb::ogb_graph_features(mol)` — complete graph with directed edge index
 - `fingerprints::ecfp::ecfp(mol, radius, n_bits)` — ECFP/Morgan fingerprint
@@ -134,6 +134,8 @@ GitHub Actions: `.github/workflows/rust.yml`. Use `gh run list`, `gh run view <i
 
 ## Gotchas
 
+- **Differential validation**: `python sdfrust-python/benchmarks/compare_tools.py --label NAME` compares parsing, descriptors, perception, Gasteiger, ECFP and OGB features against RDKit/OpenBabel/`ogb` and writes `benchmarks/reports/NAME.md`. Needs `rdkit` and `uv pip install --no-deps ogb` in the venv
+- **Isotopes**: `Atom::isotope` is the absolute mass number (M  ISO / MASS=); `mass_difference` is only the V2000 atom-block column
 - **Python venv + Conda**: If `maturin develop` fails with linker errors, run `unset CONDA_PREFIX` before building
 - **SDF wedge bonds**: Stereo field on single bonds encodes chirality (Up/Down), not E/Z — only encode bond stereo on double bonds
 
@@ -141,7 +143,7 @@ GitHub Actions: `.github/workflows/rust.yml`. Use `gh run list`, `gh run view <i
 
 - **SDF V2000**: Fixed-width columns. Coordinates at positions 0-9, 10-19, 20-29. Element at 31-33. Bond atoms at 0-2, 3-5 (1-based!). Charge codes are inverted: 1=+3, 2=+2, 3=+1, 5=-1, 6=-2, 7=-3.
 - **SDF V3000**: Variable-width, prefixed with `M  V30`. Supports >999 atoms, stereogroups, sgroups, extended bond types (hydrogen, ionic, coordination).
-- **MOL2**: Section headers `@<TRIPOS>`. SYBYL atom types like `C.ar` — element extracted before `.`. Bond type `ar` for aromatic.
+- **MOL2**: Section headers `@<TRIPOS>`. SYBYL atom types like `C.ar` — element extracted before `.`. Bond type `ar` for aromatic, `am` (amide) is single. Charge column is a partial charge (`Atom::partial_charge`), never a formal charge.
 - **XYZ**: No bonds. Element can be symbol or atomic number. Case-normalized. Multi-molecule files are concatenated blocks.
 
 ## Roadmap

@@ -112,7 +112,6 @@ impl Molecule {
             if atom.v3000_id.is_some()
                 || atom.atom_atom_mapping.is_some()
                 || atom.rgroup_label.is_some()
-                || atom.radical.is_some()
             {
                 return true;
             }
