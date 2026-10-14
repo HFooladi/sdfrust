@@ -18,7 +18,10 @@ keywords = ["chemistry", "sdf", "mol2", "xyz", "cheminformatics"]
 categories = ["science", "parser-implementations"]
 exclude = [
     "tests/",
-    "benches/",
+    # Bench sources stay in the package: the [[bench]] targets must exist for
+    # the manifest to parse when building from the Python sdist.
+    "benches/data/",
+    "benches/comparison/",
     ".github/",
     "sdfrust-python/",
     "ROADMAP.md",

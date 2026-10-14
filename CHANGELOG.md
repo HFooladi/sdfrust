@@ -86,6 +86,9 @@ files still parse.
   lists, angles), so the documented geometry API works from PyPI.
 - macOS and Windows wheels are built for Python 3.9–3.13; 0.6.0 shipped only
   3.12 wheels on those platforms.
+- The Python sdist installs from source again. 0.6.0's failed because the
+  crate's `[[bench]]` targets were excluded from the package. CI now builds
+  and imports the sdist.
 
 ### Fixed
 

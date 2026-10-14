@@ -104,6 +104,14 @@ jobs:
         with:
           command: sdist
           args: --out dist --manifest-path sdfrust-python/Cargo.toml
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install from sdist (builds from source)
+        run: |
+          pip install dist/*.tar.gz
+          python -c "import sdfrust; m = sdfrust.parse_sdf_string(open('tests/test_data/aspirin.sdf').read()); assert m.formula() == 'C9H8O4'; print(sdfrust.__version__)"
       - name: Upload sdist
         uses: actions/upload-artifact@v4
         with:
