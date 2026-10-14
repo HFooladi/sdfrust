@@ -7,14 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.8.0] - 2026-10-14
+## [0.7.0] - 2026-10-14
 
-Chemistry correctness release. Every perceived property was compared against
-RDKit 2025.09 and the `ogb` package on 4,553 molecules (NCI first 5k, EGFR and
-CDK2 ligands, heavy-atom-only and explicit-H; 113k atoms) with
-`compare_tools.py --rdkit-data`. Agreement before → after:
+Correctness release. sdfrust was audited and every feature that has an
+equivalent in an established toolkit was compared against RDKit 2025.09,
+OpenBabel 3.1 and the `ogb` package with
+`sdfrust-python/benchmarks/compare_tools.py`. The comparison used 4,553
+molecules (NCI first 5k, EGFR and CDK2 ligands, heavy-atom-only and explicit-H;
+113k atoms) plus 2,000 PDBbind 2024 ligands. Each fix has a regression test.
 
-| Feature | 0.7.0 | 0.8.0 |
+Agreement with RDKit before → after:
+
+| Feature | 0.6.0 | 0.7.0 |
 |---|---|---|
 | Molecular weight / exact mass / formula | 54% | 100% |
 | Aromatic atoms / bonds | 97.8% / 97.2% | 100% / 100% |
@@ -26,7 +30,48 @@ CDK2 ligands, heavy-atom-only and explicit-H; 113k atoms) with
 | OGB bond stereo | 99.4% | 100% |
 | ECFP bits identical to RDKit Morgan | ~0% | 100% |
 
-### Changed (breaking: values change for the same input)
+Parser/writer edge cases (V3000 via V2000 entry points, charge/isotope/radical
+round-trips, malformed records, non-ASCII input, ...): 4/17 → 17/17. OGB
+features against `ogb.utils.features`: atomic number 0% → 100%, hybridization
+0.9% → >99.99%.
+
+Also checked on 2,000 PDBbind 2024 ligands (3D, explicit H; 123k atoms):
+every property agrees with RDKit at ≥99.9%. All 27,670 PDBbind 2024 ligand
+files still parse.
+- The only ECFP or formal-charge differences are two N-oxides that RDKit
+  rewrites while sanitizing (N=O becomes [n+][O-]); sdfrust keeps the charges
+  as written in the file.
+- 0.08% of chiral tags differ, on RDKit's ring-stereo centers (dependent
+  stereocenters across rings), which aren't perceived yet.
+
+### Changed (breaking): file formats and OGB encoding
+
+- **OGB features now use the real `ogb.utils.features` encoding.** Values were
+  previously raw values on a different scale, which is incompatible with OGB's
+  `AtomEncoder`/`BondEncoder`. Models trained on 0.6 features must be retrained.
+  - atomic number is `Z - 1` (misc = 118)
+  - hybridization is `[SP, SP2, SP3, SP3D, SP3D2, misc]` (S → misc)
+  - degree is total degree including implicit H
+  - radicals are counted as electrons
+  - bond stereo uses `[NONE, Z, E, CIS, TRANS, ANY]` (wedge flags are no longer read as E/Z)
+  - out-of-range values go to the `misc` bucket
+- `Hybridization::to_ogb_index()` returns OGB indices (SP = 0 … SP3D2 = 4, S/Other = 5).
+- MOL2: bond type `am` (amide) is now `Single`, not `Aromatic`.
+- MOL2: partial charges are stored in the new `Atom::partial_charge` instead of
+  being rounded into `formal_charge`. `N.4` atoms get formal charge +1.
+- Isotopes from `M  ISO` / V3000 `MASS=` are stored as absolute mass numbers in the
+  new `Atom::isotope: Option<u16>`. Previously they went into `mass_difference: i8`,
+  which also corrupted masses ≥ 128. `mass_difference` now only holds the V2000
+  atom-block column.
+- `write_sdf` (V2000) returns `SdfError::Unwritable` for molecules it cannot
+  represent: more than 999 atoms/bonds, coordinates beyond ±9999.9999, or long atom
+  symbols. It previously wrote a corrupt file. `write_sdf_auto` falls back to V3000
+  in these cases.
+- Writers return `SdfError::InvalidAtomIndex` for bonds or groups that reference
+  missing atoms. They previously panicked or wrote invalid files.
+- `MaybeGzReader::Gzip` wraps `MultiGzDecoder`.
+
+### Changed (breaking): chemistry perception (values change for the same input)
 
 - `molecular_weight`, `exact_mass` and `Molecule::formula` count implicit
   hydrogens, so heavy-atom-only files give the full molecule. They also use
@@ -60,17 +105,16 @@ CDK2 ligands, heavy-atom-only and explicit-H; 113k atoms) with
 - The element table covers all 118 elements, with isotope masses. MOL2 and
   XYZ atoms are flagged `no_implicit`.
 
-Also checked on 2,000 PDBbind 2024 ligands (3D, explicit H; 123k atoms):
-every property agrees with RDKit at ≥99.9%. All 27,670 PDBbind 2024 ligand
-files still parse.
-- The only ECFP or formal-charge differences are two N-oxides that RDKit
-  rewrites while sanitizing (N=O becomes [n+][O-]); sdfrust keeps the charges
-  as written in the file.
-- 0.08% of chiral tags differ, on RDKit's ring-stereo centers (dependent
-  stereocenters across rings), which aren't perceived yet.
-
 ### Added
 
+- `Atom::isotope`, `Atom::partial_charge`, `Atom::radical_electrons()`. Python
+  `Atom` exposes `isotope`, `partial_charge`, `radical` and `radical_electrons`.
+- `SdfParser::skip_to_record_end()`, `SdfV3000Parser::skip_to_record_end()`.
+- `sdfrust-python/benchmarks/compare_tools.py`: a differential comparison harness
+  against RDKit, OpenBabel and OGB, with Markdown/JSON reports.
+- `tests/regression_tests.rs` and `sdfrust-python/tests/test_regressions.py`.
+- The Python OGB validation tests compare against `ogb.utils.features` itself, and
+  CI installs RDKit and OGB so they run.
 - `descriptors::stereo::double_bond_stereo`: E/Z from coordinates.
 - `gasteiger_charges_with_hydrogens`: also returns implicit-H charges.
 - `element_by_atomic_number`, `isotope_mass`; `ElementData::outer_electrons`
@@ -79,56 +123,6 @@ files still parse.
 - `scripts/gen_element_table.py`, which regenerates the periodic table from RDKit.
 - `compare_tools.py --rdkit-data/--smiles/--extra` for larger corpora, and
   exact ECFP bit comparison.
-
-### Packaging
-
-- Python wheels include the `geometry` feature (RMSD, transforms, neighbor
-  lists, angles), so the documented geometry API works from PyPI.
-- macOS and Windows wheels are built for Python 3.9–3.13; 0.6.0 shipped only
-  3.12 wheels on those platforms.
-- The Python sdist installs from source again. 0.6.0's failed because the
-  crate's `[[bench]]` targets were excluded from the package. CI now builds
-  and imports the sdist.
-
-### Fixed
-
-- The V2000 parser and writer handle stereo code 3 ("cis/trans unknown") on
-  double bonds.
-
-## [0.7.0] - not published
-
-These changes were never released separately; they ship in 0.8.0.
-
-Correctness release. Every change below was found by a differential comparison
-against RDKit 2025.09, OpenBabel 3.1 and the `ogb` package
-(`sdfrust-python/benchmarks/compare_tools.py`); each has a regression test.
-
-### Changed (breaking)
-
-- **OGB features now use the real `ogb.utils.features` encoding.** Values were
-  previously raw values on a different scale, which is incompatible with OGB's
-  `AtomEncoder`/`BondEncoder`. Models trained on 0.6 features must be retrained.
-  - atomic number is `Z - 1` (misc = 118)
-  - hybridization is `[SP, SP2, SP3, SP3D, SP3D2, misc]` (S → misc)
-  - degree is total degree including implicit H
-  - radicals are counted as electrons
-  - bond stereo uses `[NONE, Z, E, CIS, TRANS, ANY]` (wedge flags are no longer read as E/Z)
-  - out-of-range values go to the `misc` bucket
-- `Hybridization::to_ogb_index()` returns OGB indices (SP = 0 … SP3D2 = 4, S/Other = 5).
-- MOL2: bond type `am` (amide) is now `Single`, not `Aromatic`.
-- MOL2: partial charges are stored in the new `Atom::partial_charge` instead of
-  being rounded into `formal_charge`. `N.4` atoms get formal charge +1.
-- Isotopes from `M  ISO` / V3000 `MASS=` are stored as absolute mass numbers in the
-  new `Atom::isotope: Option<u16>`. Previously they went into `mass_difference: i8`,
-  which also corrupted masses ≥ 128. `mass_difference` now only holds the V2000
-  atom-block column.
-- `write_sdf` (V2000) returns `SdfError::Unwritable` for molecules it cannot
-  represent: more than 999 atoms/bonds, coordinates beyond ±9999.9999, or long atom
-  symbols. It previously wrote a corrupt file. `write_sdf_auto` falls back to V3000
-  in these cases.
-- Writers return `SdfError::InvalidAtomIndex` for bonds or groups that reference
-  missing atoms. They previously panicked or wrote invalid files.
-- `MaybeGzReader::Gzip` wraps `MultiGzDecoder`.
 
 ### Fixed
 
@@ -156,17 +150,18 @@ against RDKit 2025.09, OpenBabel 3.1 and the `ogb` package
 - `ecfp(n_bits = 0)` no longer panics (returns an empty fingerprint; Python raises
   `ValueError`). Python `Molecule.add_bond` raises `IndexError` for bad atom indices.
 - Gzip: multi-member (concatenated / bgzip) files are read completely.
+- The V2000 parser and writer handle stereo code 3 ("cis/trans unknown") on
+  double bonds.
 
-### Added
+### Packaging
 
-- `Atom::isotope`, `Atom::partial_charge`, `Atom::radical_electrons()`. Python
-  `Atom` exposes `isotope`, `partial_charge`, `radical` and `radical_electrons`.
-- `SdfParser::skip_to_record_end()`, `SdfV3000Parser::skip_to_record_end()`.
-- `sdfrust-python/benchmarks/compare_tools.py`: a differential comparison harness
-  against RDKit, OpenBabel and OGB, with Markdown/JSON reports.
-- `tests/regression_tests.rs` and `sdfrust-python/tests/test_regressions.py`.
-- The Python OGB validation tests compare against `ogb.utils.features` itself, and
-  CI installs RDKit and OGB so they run.
+- Python wheels include the `geometry` feature (RMSD, transforms, neighbor
+  lists, angles), so the documented geometry API works from PyPI.
+- macOS and Windows wheels are built for Python 3.9–3.13; 0.6.0 shipped only
+  3.12 wheels on those platforms.
+- The Python sdist installs from source again. 0.6.0's failed because the
+  crate's `[[bench]]` targets were excluded from the package. CI now builds
+  and imports the sdist.
 
 ## [0.6.0] - 2026-02-19
 
@@ -236,8 +231,8 @@ against RDKit 2025.09, OpenBabel 3.1 and the `ogb` package
 - Molecule methods: `formula()`, `centroid()`, `translate()`, `neighbors()`, `element_counts()`
 - Memory-efficient streaming iterator for large multi-molecule files
 
-[Unreleased]: https://github.com/HFooladi/sdfrust/compare/v0.8.0...HEAD
-[0.8.0]: https://github.com/HFooladi/sdfrust/compare/v0.6.0...v0.8.0
+[Unreleased]: https://github.com/HFooladi/sdfrust/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/HFooladi/sdfrust/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/HFooladi/sdfrust/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/HFooladi/sdfrust/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/HFooladi/sdfrust/compare/v0.3.0...v0.4.0
