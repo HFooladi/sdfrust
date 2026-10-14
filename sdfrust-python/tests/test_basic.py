@@ -19,7 +19,7 @@ class TestVersion:
         """Test that version is accessible."""
         assert hasattr(sdfrust, "__version__")
         assert isinstance(sdfrust.__version__, str)
-        assert sdfrust.__version__ == "0.8.0"
+        assert sdfrust.__version__ == "0.7.0"
 
 
 class TestAtom:

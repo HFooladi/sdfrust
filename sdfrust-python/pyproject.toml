@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "sdfrust"
-version = "0.8.0"
+version = "0.7.0"
 description = "Fast Rust-based SDF, MOL2, and XYZ molecular structure file parser"
 authors = [
     {name = "Hosein Fooladi", email = "fooladi.hosein@gmail.com"}
