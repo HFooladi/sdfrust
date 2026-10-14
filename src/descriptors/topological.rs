@@ -4,6 +4,10 @@
 //! such as ring count, ring membership, and rotatable bond count.
 
 use crate::bond::BondOrder;
+use crate::descriptors::aromaticity::{all_aromatic_atoms, all_aromatic_bonds};
+use crate::descriptors::elements::get_element;
+use crate::descriptors::valence::all_implicit_hydrogen_counts;
+use crate::graph::AdjacencyList;
 use crate::molecule::Molecule;
 
 /// Count the number of rings in the molecule.
@@ -98,18 +102,14 @@ pub fn ring_bonds(mol: &Molecule) -> Vec<bool> {
 
 /// Count rotatable bonds.
 ///
-/// A bond is considered rotatable if:
-/// - It is a single bond (BondOrder::Single)
-/// - It is not in a ring
-/// - Neither atom is hydrogen
-/// - Both atoms are non-terminal (each is bonded to at least one other heavy atom)
+/// Uses RDKit's default ("strict") definition, so results match
+/// `rdMolDescriptors.CalcNumRotatableBonds`. A bond is rotatable if it is a
+/// single, non-ring bond between two non-terminal heavy atoms, except:
+/// - bonds to atoms with a triple bond, CF3/CCl3/CBr3 or tert-butyl carbons;
+/// - amide, ester, thioester and similar `C(=X)-Y` bonds (X, Y = N/O/S) and
+///   amidinium `C(=N+)-N` bonds.
 ///
-/// This follows the common definition: "a rotatable bond is any single non-ring bond,
-/// bounded to nonterminal heavy atoms."
-///
-/// Terminal atoms are those bonded only to hydrogens (and this one heavy atom bond).
-/// For example, methyl groups (-CH3), amino groups (-NH2), and hydroxyl groups (-OH)
-/// are terminal.
+/// Hydrogens are ignored whether they are explicit atoms or implicit.
 ///
 /// # Example
 ///
@@ -131,39 +131,96 @@ pub fn rotatable_bond_count(mol: &Molecule) -> usize {
         return 0;
     }
 
-    let (_, bond_in_ring) = compute_ring_membership(mol);
-    let heavy_degree = compute_heavy_atom_degrees(mol);
+    let n = mol.atom_count();
+    let adj = AdjacencyList::from_molecule(mol);
+    let in_ring = ring_bonds(mol);
+    let aromatic_atom = all_aromatic_atoms(mol);
+    let aromatic_bond = all_aromatic_bonds(mol);
+    let implicit_h = all_implicit_hydrogen_counts(mol);
+    let z: Vec<u8> = mol
+        .atoms
+        .iter()
+        .map(|a| get_element(&a.element).map_or(0, |e| e.atomic_number))
+        .collect();
+
+    let heavy_degree = |i: usize| adj.neighbors(i).iter().filter(|&&(j, _)| z[j] != 1).count();
+    let total_h = |i: usize| {
+        implicit_h[i] as usize + adj.neighbors(i).iter().filter(|&&(j, _)| z[j] == 1).count()
+    };
+    let aliphatic = |i: usize, element: u8| z[i] == element && !aromatic_atom[i];
+    let has_triple = |i: usize| {
+        adj.neighbors(i)
+            .iter()
+            .any(|&(_, b)| mol.bonds[b].order == BondOrder::Triple)
+    };
+    let count_neighbors = |i: usize, pred: &dyn Fn(usize) -> bool| {
+        adj.neighbors(i).iter().filter(|&&(j, _)| pred(j)).count()
+    };
+    // Non-ring single bonds of atom i: the partners
+    let chain_partners = |i: usize| {
+        adj.neighbors(i)
+            .iter()
+            .filter(|&&(_, b)| mol.bonds[b].order == BondOrder::Single && !in_ring[b])
+            .map(|&(j, _)| j)
+            .collect::<Vec<_>>()
+    };
+
+    // Exclusions that apply to both ends of the bond
+    let basic_ok = |i: usize| {
+        z[i] != 1
+            && heavy_degree(i) != 1
+            && !has_triple(i)
+            && ![9u8, 17, 35]
+                .iter()
+                .any(|&x| aliphatic(i, 6) && count_neighbors(i, &|j| z[j] == x) >= 3)
+            && !(aliphatic(i, 6)
+                && count_neighbors(i, &|j| aliphatic(j, 6) && total_h(j) == 3) >= 3)
+    };
+    // [CD3](=X): aliphatic C with 3 heavy neighbours and a non-aromatic double
+    // bond to an aliphatic N/O/S (or N+ when `cationic_n`)
+    let carbonyl_like = |i: usize, cationic_n: bool| {
+        aliphatic(i, 6)
+            && heavy_degree(i) == 3
+            && adj.neighbors(i).iter().any(|&(j, b)| {
+                mol.bonds[b].order == BondOrder::Double
+                    && !aromatic_bond[b]
+                    && if cationic_n {
+                        aliphatic(j, 7) && mol.atoms[j].formal_charge == 1
+                    } else {
+                        aliphatic(j, 7) || aliphatic(j, 8) || aliphatic(j, 16)
+                    }
+            })
+    };
+    // [#7,O,S!D1]
+    let hetero =
+        |i: usize| z[i] == 7 || aliphatic(i, 8) || (aliphatic(i, 16) && heavy_degree(i) != 1);
+    // [#7!D1]
+    let inner_n = |i: usize| z[i] == 7 && heavy_degree(i) != 1;
+    // Exclusions that RDKit's pattern applies to one end of the bond
+    let full_ok = |i: usize| {
+        basic_ok(i)
+            && !(carbonyl_like(i, false) && chain_partners(i).into_iter().any(hetero))
+            && !(hetero(i)
+                && chain_partners(i)
+                    .into_iter()
+                    .any(|j| carbonyl_like(j, false)))
+            && !(carbonyl_like(i, true) && chain_partners(i).into_iter().any(inner_n))
+            && !(inner_n(i)
+                && chain_partners(i)
+                    .into_iter()
+                    .any(|j| carbonyl_like(j, true)))
+    };
 
     mol.bonds
         .iter()
         .enumerate()
-        .filter(|(i, bond)| {
-            // Must be a single bond
-            if bond.order != BondOrder::Single {
-                return false;
-            }
-
-            // Must not be in a ring
-            if bond_in_ring[*i] {
-                return false;
-            }
-
-            // Neither atom can be hydrogen
-            let atom1_elem = mol.atoms.get(bond.atom1).map(|a| a.element.as_str());
-            let atom2_elem = mol.atoms.get(bond.atom2).map(|a| a.element.as_str());
-            if is_hydrogen(atom1_elem) || is_hydrogen(atom2_elem) {
-                return false;
-            }
-
-            // Both atoms must be non-terminal (heavy_degree > 1)
-            // heavy_degree counts bonds to other heavy atoms
-            let hdeg1 = heavy_degree.get(bond.atom1).copied().unwrap_or(0);
-            let hdeg2 = heavy_degree.get(bond.atom2).copied().unwrap_or(0);
-            if hdeg1 <= 1 || hdeg2 <= 1 {
-                return false;
-            }
-
-            true
+        .filter(|&(b, bond)| {
+            let (a1, a2) = (bond.atom1, bond.atom2);
+            a1 < n
+                && a2 < n
+                && matches!(bond.order, BondOrder::Single | BondOrder::Aromatic)
+                && !in_ring[b]
+                && ((full_ok(a1) && basic_ok(a2)) || (full_ok(a2) && basic_ok(a1)))
         })
         .count()
 }
@@ -343,39 +400,6 @@ fn compute_degrees(mol: &Molecule) -> Vec<usize> {
         }
     }
     degrees
-}
-
-/// Compute heavy atom degree (number of bonds to non-hydrogen atoms) for each atom.
-fn compute_heavy_atom_degrees(mol: &Molecule) -> Vec<usize> {
-    let n = mol.atoms.len();
-    let mut degrees = vec![0usize; n];
-    for bond in &mol.bonds {
-        if bond.atom1 < n && bond.atom2 < n {
-            let elem1 = mol.atoms.get(bond.atom1).map(|a| a.element.as_str());
-            let elem2 = mol.atoms.get(bond.atom2).map(|a| a.element.as_str());
-
-            // If atom2 is not hydrogen, increment atom1's heavy degree
-            if !is_hydrogen(elem2) {
-                degrees[bond.atom1] += 1;
-            }
-            // If atom1 is not hydrogen, increment atom2's heavy degree
-            if !is_hydrogen(elem1) {
-                degrees[bond.atom2] += 1;
-            }
-        }
-    }
-    degrees
-}
-
-/// Check if an element is hydrogen.
-fn is_hydrogen(element: Option<&str>) -> bool {
-    match element {
-        Some(e) => {
-            let e = e.trim().to_uppercase();
-            e == "H" || e == "D" || e == "T"
-        }
-        None => false,
-    }
 }
 
 #[cfg(test)]

@@ -588,12 +588,12 @@ fn test_rotatable_bond_count_ethane() {
 #[test]
 fn test_rotatable_bond_count_aspirin() {
     let mol = parse_sdf_file("tests/test_data/aspirin.sdf").unwrap();
-    // PubChem value: 3
-    // RDKit definition: single, non-ring, both atoms non-terminal (heavy_degree > 1)
+    // RDKit (strict, default): 2 -- aryl-COOH and aryl-O; the ester O-C(=O)
+    // bond is excluded. PubChem's definition gives 3.
     assert_eq!(
         rotatable_bond_count(&mol),
-        3,
-        "Aspirin should have 3 rotatable bonds"
+        2,
+        "Aspirin should have 2 rotatable bonds"
     );
 }
 
@@ -629,7 +629,7 @@ fn test_rotatable_bond_count_single_bond_terminal() {
 #[test]
 fn test_rotatable_bond_count_via_molecule_method() {
     let mol = parse_sdf_file("tests/test_data/aspirin.sdf").unwrap();
-    assert_eq!(mol.rotatable_bond_count(), 3);
+    assert_eq!(mol.rotatable_bond_count(), 2);
 }
 
 // ============================================================

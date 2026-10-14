@@ -656,3 +656,63 @@ fn conjugation_matches_rdkit_for_former_failures() {
     );
     assert!(all_conjugated_bonds(&sulfone).iter().all(|&c| !c));
 }
+
+#[test]
+fn gasteiger_matches_rdkit_values() {
+    // Reference: RDKit 2025.09 ComputeGasteigerCharges on heavy-atom-only SMILES
+    use sdfrust::descriptors::gasteiger_charges_with_hydrogens;
+    let ethanol = kekule(&["C", "C", "O"], &[(0, 1, 1), (1, 2, 1)]);
+    let (q, h) = gasteiger_charges_with_hydrogens(&ethanol);
+    for (ours, rdkit) in q.iter().zip([-0.0418, 0.0402, -0.3967]) {
+        assert!((ours - rdkit).abs() < 1e-4, "{ours} vs {rdkit}");
+    }
+    for (ours, rdkit) in h.iter().zip([0.0761, 0.1121, 0.2100]) {
+        assert!((ours - rdkit).abs() < 1e-4, "{ours} vs {rdkit}");
+    }
+}
+
+#[test]
+fn rotatable_bonds_follow_rdkit_strict_definition() {
+    use sdfrust::descriptors::rotatable_bond_count;
+    // N-methylacetamide CNC(C)=O: the amide bond is excluded -> 0
+    let amide = kekule(
+        &["C", "N", "C", "C", "O"],
+        &[(0, 1, 1), (1, 2, 1), (2, 3, 1), (2, 4, 2)],
+    );
+    assert_eq!(rotatable_bond_count(&amide), 0);
+
+    // Methyl propanoate CCC(=O)OC: only CH3CH2-C(=O)... C-C(=O) counts -> 1
+    let ester = kekule(
+        &["C", "C", "C", "O", "O", "C"],
+        &[(0, 1, 1), (1, 2, 1), (2, 3, 2), (2, 4, 1), (4, 5, 1)],
+    );
+    assert_eq!(rotatable_bond_count(&ester), 1);
+
+    // Benzonitrile and trifluorotoluene: triple-bond / CF3 ends excluded -> 0
+    let ring = [
+        (0, 1, 2),
+        (1, 2, 1),
+        (2, 3, 2),
+        (3, 4, 1),
+        (4, 5, 2),
+        (5, 0, 1),
+    ];
+    let mut bonds = ring.to_vec();
+    bonds.extend([(0, 6, 1), (6, 7, 3)]);
+    assert_eq!(
+        rotatable_bond_count(&kekule(&["C", "C", "C", "C", "C", "C", "C", "N"], &bonds)),
+        0
+    );
+    let mut bonds = ring.to_vec();
+    bonds.extend([(0, 6, 1), (6, 7, 1), (6, 8, 1), (6, 9, 1)]);
+    assert_eq!(
+        rotatable_bond_count(&kekule(
+            &["C", "C", "C", "C", "C", "C", "C", "F", "F", "F"],
+            &bonds
+        )),
+        0
+    );
+
+    // Butane: one rotatable bond whether hydrogens are explicit or implicit
+    assert_eq!(rotatable_bond_count(&carbon_chain(4)), 1);
+}
