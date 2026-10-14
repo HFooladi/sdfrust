@@ -111,7 +111,36 @@ SMILES = {
 # ----------------------------------------------------------------------------
 
 
-def build_corpus(workdir: Path, pdbbind_n: int) -> list[Path]:
+def build_smiles_corpus(gen: Path, smiles_file: Path, limit: int) -> list[Path]:
+    """Convert a SMILES file into two multi-record Kekulé SDFs (heavy-atom only, explicit H)."""
+    noh = gen / f"{smiles_file.stem}__noh.sdf"
+    withh = gen / f"{smiles_file.stem}__h.sdf"
+    w_noh, w_h = Chem.SDWriter(str(noh)), Chem.SDWriter(str(withh))
+    w_noh.SetKekulize(True)
+    w_h.SetKekulize(True)
+    n = 0
+    for line in smiles_file.read_text().splitlines():
+        parts = line.split()
+        if not parts or parts[0].upper() == "SMILES":
+            continue
+        mol = Chem.MolFromSmiles(parts[0])
+        if mol is None or mol.GetNumAtoms() == 0:
+            continue
+        mol.SetProp("_Name", parts[1] if len(parts) > 1 else f"mol{n}")
+        AllChem.Compute2DCoords(mol)
+        w_noh.write(mol)
+        molh = Chem.AddHs(mol, addCoords=True)
+        w_h.write(molh)
+        n += 1
+        if n >= limit:
+            break
+    w_noh.close()
+    w_h.close()
+    return [noh, withh]
+
+
+def build_corpus(workdir: Path, pdbbind_n: int, smiles: list[Path] = (), smiles_limit: int = 2000,
+                 extra: list[Path] = ()) -> list[Path]:
     """Return SDF files to compare: repo test data + generated edge cases."""
     files = sorted((ROOT / "tests/test_data").glob("*.sdf"))
     files += sorted((ROOT / "sdfrust-python/examples/data").glob("*.sdf"))
@@ -136,6 +165,9 @@ def build_corpus(workdir: Path, pdbbind_n: int) -> list[Path]:
         heavy.SetProp("_Name", name)
         (gen / f"{name}__noh.sdf").write_text(Chem.MolToMolBlock(heavy, kekulize=True) + "$$$$\n")
     files += sorted(gen.glob("*.sdf"))
+    for smi in smiles:
+        files += build_smiles_corpus(gen, Path(smi), smiles_limit)
+    files += [Path(p) for p in extra]
 
     pdb_dir = os.environ.get("PDBBIND_2024_DIR")
     if pdbbind_n and pdb_dir:
@@ -361,6 +393,15 @@ def compare_molecule(t: Tally, path: Path, idx: int, ours, rd, ob, raw=None):
 
         _safe(t, "ogb.atom", ctx, ogb)
 
+    # ECFP vs RDKit Morgan: bits should be identical on the same graph
+    def ecfp_bits():
+        for radius in (2, 3):
+            gen = rdFingerprintGenerator.GetMorganGenerator(radius=radius, fpSize=2048)
+            t.check(f"ecfp.morgan_bits_r{radius}", sorted(ours.ecfp_on_bits(radius, 2048)),
+                    list(gen.GetFingerprint(rd).GetOnBits()), ctx)
+
+    _safe(t, "ecfp.morgan_bits_r2", ctx, ecfp_bits)
+
     # Round trip: sdfrust writer -> RDKit reader
     def roundtrip():
         block = sdfrust.write_sdf_auto_string(ours)
@@ -549,6 +590,12 @@ def main():
     ap.add_argument("--out", default=str(ROOT / "sdfrust-python/benchmarks/reports"))
     ap.add_argument("--label", default="comparison")
     ap.add_argument("--pdbbind", type=int, default=0, help="also compare N PDBbind ligands")
+    ap.add_argument("--smiles", action="append", default=[],
+                    help="SMILES file to convert into an extra corpus (repeatable)")
+    ap.add_argument("--smiles-limit", type=int, default=2000)
+    ap.add_argument("--extra", action="append", default=[], help="extra SDF file (repeatable)")
+    ap.add_argument("--rdkit-data", action="store_true",
+                    help="add RDKit's bundled NCI first_5K.smi and EGFR/CDK2 ligand SDFs")
     args = ap.parse_args()
 
     out = Path(args.out)
@@ -556,7 +603,13 @@ def main():
     t = Tally()
     with tempfile.TemporaryDirectory() as tmp:
         work = Path(tmp)
-        files = build_corpus(work, args.pdbbind)
+        smiles, extra = list(args.smiles), list(args.extra)
+        if args.rdkit_data:
+            from rdkit import RDConfig
+            smiles.append(os.path.join(RDConfig.RDDataDir, "NCI", "first_5K.smi"))
+            extra += [os.path.join(RDConfig.RDContribDir, "PBF", "testData", "egfr.sdf"),
+                      os.path.join(RDConfig.RDContribDir, "Fastcluster", "testdata", "cdk2.sdf")]
+        files = build_corpus(work, args.pdbbind, smiles, args.smiles_limit, extra)
         fps = []
         for path in files:
             try:
@@ -584,6 +637,9 @@ def main():
     # ECFP: does sdfrust similarity rank pairs the way RDKit Morgan does?
     ecfp = {}
     if len(fps) > 3:
+        if len(fps) > 400:  # pairwise cost is quadratic; a fixed sample is enough
+            import random
+            fps = random.Random(0).sample(fps, 400)
         ours_s, ref_s = [], []
         for i in range(len(fps)):
             for j in range(i + 1, len(fps)):

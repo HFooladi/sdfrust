@@ -16,8 +16,8 @@ A fast, pure-Rust parser for SDF (Structure Data File), MOL2, and XYZ chemical s
 - **Python Bindings**: First-class Python API with NumPy integration
 - **Streaming Parsing**: Memory-efficient iteration over large files
 - **Molecular Descriptors**: MW, exact mass, ring count, rotatable bonds, and more
-- **ML-Ready Featurization**: OGB-compatible GNN features, ECFP fingerprints, Gasteiger charges
-- **Chemical Perception**: SSSR rings, aromaticity (Hückel 4n+2), hybridization, conjugation
+- **ML-Ready Featurization**: OGB GNN features (exact `ogb.utils.features` encoding), ECFP fingerprints bit-identical to RDKit Morgan, Gasteiger charges
+- **Chemical Perception**: SSSR rings, aromaticity, hybridization, conjugation, E/Z and tetrahedral stereo — validated against RDKit
 - **3D GNN Support**: Cutoff-based neighbor lists, bond/dihedral angles for SchNet/DimeNet/GemNet
 - **High Performance**: ~220,000 molecules/sec (4-7x faster than RDKit)
 - **Real-World Validated**: 100% success rate on PDBbind 2024 dataset (27,670 ligand SDF files)
@@ -235,6 +235,24 @@ mol.bonds_by_order(BondOrder::Double)
 
 sdfrust provides chemical perception and featurization for molecular ML — compute features in Rust, output NumPy arrays for PyTorch/JAX.
 
+### Validated against RDKit
+
+Every feature is compared with RDKit 2025.09 and the `ogb` package on 4,553 molecules
+(NCI first 5k plus EGFR/CDK2 ligands, heavy-atom-only and explicit-H; 113k atoms)
+by `sdfrust-python/benchmarks/compare_tools.py`:
+
+| Feature | Agreement with RDKit |
+|---|---|
+| Molecular weight, exact mass, formula, implicit H | 100% |
+| Aromaticity (atoms and bonds), ring membership, SSSR sizes | 100% |
+| Hybridization, conjugation | >99.99% |
+| Rotatable bonds (RDKit default/strict) | 100% |
+| Gasteiger charges (\|Δq\| < 0.02) | 100% |
+| ECFP/Morgan bits (radius 2 and 3) | 100% identical |
+| OGB atom and bond features vs `ogb.utils.features` | >99.9% (residual: non-stereogenic cage bridgeheads RDKit tags from 3D) |
+
+The latest report is in `sdfrust-python/benchmarks/reports/`.
+
 ### OGB GNN Featurization
 
 ```rust
@@ -261,6 +279,9 @@ use sdfrust::fingerprints::ecfp;
 let fp = ecfp::ecfp(&mol, 2, 2048);  // ECFP4, 2048 bits
 let similarity = fp.tanimoto(&other_fp);
 ```
+
+Bits and unfolded identifiers are identical to RDKit's
+`GetMorganGenerator(radius=2, fpSize=2048)` (default options) for the same molecular graph.
 
 ```python
 fp = mol.ecfp(radius=2, n_bits=2048)       # List[bool]

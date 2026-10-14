@@ -24,188 +24,167 @@
 //! assert!(charges[1] > 0.0);
 //! ```
 
-use crate::descriptors::hybridization::{Hybridization, atom_hybridization};
+use crate::descriptors::conjugation::all_conjugated_bonds;
+use crate::descriptors::elements::get_element;
+use crate::descriptors::hybridization::{Hybridization, all_hybridizations};
+use crate::descriptors::valence::all_implicit_hydrogen_counts;
 use crate::graph::AdjacencyList;
 use crate::molecule::Molecule;
 
-/// Gasteiger electronegativity parameters (a, b, c).
-///
-/// Electronegativity χ = a + b*q + c*q²
-/// where q is the charge on the atom.
+/// Damping factor applied (and squared each iteration) to charge transfers.
+const DAMPING: f64 = 0.5;
+
+/// Ionization electronegativity of hydrogen (χ at q = +1), a special value
+/// in the Gasteiger-Marsili scheme.
+const HYDROGEN_ION_X: f64 = 20.02;
+
+/// Default number of iterations, as in RDKit.
+const DEFAULT_ITERATIONS: usize = 12;
+
+/// Gasteiger electronegativity parameters: χ(q) = a + b·q + c·q².
+#[derive(Clone, Copy)]
 struct ElectronegativityParams {
     a: f64,
     b: f64,
     c: f64,
 }
 
-/// Get electronegativity parameters for an atom type.
-///
-/// Parameters from Gasteiger & Marsili (1980) and extensions.
-fn get_params(element: &str, hybridization: Hybridization) -> Option<ElectronegativityParams> {
-    let elem = element.trim();
-    let upper: String = elem
-        .chars()
-        .next()
-        .map(|c| c.to_uppercase().collect::<String>())
-        .unwrap_or_default()
-        + &elem.chars().skip(1).collect::<String>().to_lowercase();
+/// Parameter table (element, mode, a, b, c), identical to RDKit's
+/// `GasteigerParams` defaults. Modes are the hybridization ("sp3", "sp2",
+/// "sp"), "*" for hydrogen, and "so"/"so2" for sulfur without a hybridization.
+const PARAMS: &[(&str, &str, f64, f64, f64)] = &[
+    ("H", "*", 7.17, 6.24, -0.56),
+    ("C", "sp3", 7.98, 9.18, 1.88),
+    ("C", "sp2", 8.79, 9.32, 1.51),
+    ("C", "sp", 10.39, 9.45, 0.73),
+    ("N", "sp3", 11.54, 10.82, 1.36),
+    ("N", "sp2", 12.87, 11.15, 0.85),
+    ("N", "sp", 15.68, 11.7, -0.27),
+    ("O", "sp3", 14.18, 12.92, 1.39),
+    ("O", "sp2", 17.07, 13.79, 0.47),
+    ("F", "sp3", 14.66, 13.85, 2.31),
+    ("Cl", "sp3", 11.00, 9.69, 1.35),
+    ("Br", "sp3", 10.08, 8.47, 1.16),
+    ("I", "sp3", 9.9, 7.96, 0.96),
+    ("S", "sp3", 10.14, 9.13, 1.38),
+    ("S", "so", 10.14, 9.13, 1.38),
+    ("S", "so2", 12.00, 10.81, 1.20),
+    ("S", "sp2", 10.88, 9.49, 1.33),
+    ("P", "sp3", 8.90, 8.24, 0.96),
+    ("P", "sp2", 9.665, 8.530, 0.735),
+    ("Si", "sp3", 7.300, 6.567, 0.657),
+    ("Si", "sp2", 7.905, 6.748, 0.443),
+    ("Si", "sp", 9.065, 7.027, -0.002),
+    ("B", "sp3", 5.980, 6.820, 1.605),
+    ("B", "sp2", 6.420, 6.807, 1.322),
+    ("Be", "sp3", 3.845, 6.755, 3.165),
+    ("Be", "sp2", 4.005, 6.725, 3.035),
+    ("Mg", "sp2", 3.565, 5.572, 2.197),
+    ("Mg", "sp3", 3.300, 5.587, 2.447),
+    ("Mg", "sp", 4.040, 5.472, 1.823),
+    ("Al", "sp3", 5.375, 4.953, 0.867),
+    ("Al", "sp2", 5.795, 5.020, 0.695),
+];
 
-    match (upper.as_str(), hybridization) {
-        // Hydrogen
-        ("H", _) | ("D", _) | ("T", _) => Some(ElectronegativityParams {
-            a: 7.17,
-            b: 6.24,
-            c: -0.56,
-        }),
-
-        // Carbon
-        ("C", Hybridization::SP3) => Some(ElectronegativityParams {
-            a: 7.98,
-            b: 9.18,
-            c: 1.88,
-        }),
-        ("C", Hybridization::SP2) => Some(ElectronegativityParams {
-            a: 8.79,
-            b: 9.32,
-            c: 1.51,
-        }),
-        ("C", Hybridization::SP) => Some(ElectronegativityParams {
-            a: 10.39,
-            b: 9.45,
-            c: 0.73,
-        }),
-        ("C", _) => Some(ElectronegativityParams {
-            a: 7.98,
-            b: 9.18,
-            c: 1.88,
-        }),
-
-        // Nitrogen
-        ("N", Hybridization::SP3) => Some(ElectronegativityParams {
-            a: 11.54,
-            b: 10.82,
-            c: 1.36,
-        }),
-        ("N", Hybridization::SP2) => Some(ElectronegativityParams {
-            a: 12.87,
-            b: 11.15,
-            c: 0.85,
-        }),
-        ("N", Hybridization::SP) => Some(ElectronegativityParams {
-            a: 15.68,
-            b: 11.70,
-            c: -0.27,
-        }),
-        ("N", _) => Some(ElectronegativityParams {
-            a: 11.54,
-            b: 10.82,
-            c: 1.36,
-        }),
-
-        // Oxygen
-        ("O", Hybridization::SP3) => Some(ElectronegativityParams {
-            a: 14.18,
-            b: 12.92,
-            c: 1.39,
-        }),
-        ("O", Hybridization::SP2) => Some(ElectronegativityParams {
-            a: 17.07,
-            b: 13.79,
-            c: 0.47,
-        }),
-        ("O", _) => Some(ElectronegativityParams {
-            a: 14.18,
-            b: 12.92,
-            c: 1.39,
-        }),
-
-        // Fluorine
-        ("F", _) => Some(ElectronegativityParams {
-            a: 14.66,
-            b: 13.85,
-            c: 2.31,
-        }),
-
-        // Chlorine
-        ("Cl", _) => Some(ElectronegativityParams {
-            a: 11.00,
-            b: 9.69,
-            c: 1.35,
-        }),
-
-        // Bromine
-        ("Br", _) => Some(ElectronegativityParams {
-            a: 10.08,
-            b: 8.47,
-            c: 1.16,
-        }),
-
-        // Iodine
-        ("I", _) => Some(ElectronegativityParams {
-            a: 9.90,
-            b: 7.96,
-            c: 0.96,
-        }),
-
-        // Sulfur
-        ("S", Hybridization::SP3) => Some(ElectronegativityParams {
-            a: 10.14,
-            b: 9.13,
-            c: 1.38,
-        }),
-        ("S", Hybridization::SP2) => Some(ElectronegativityParams {
-            a: 10.88,
-            b: 9.49,
-            c: 1.33,
-        }),
-        ("S", _) => Some(ElectronegativityParams {
-            a: 10.14,
-            b: 9.13,
-            c: 1.38,
-        }),
-
-        // Phosphorus
-        ("P", Hybridization::SP3) => Some(ElectronegativityParams {
-            a: 8.90,
-            b: 8.24,
-            c: 0.96,
-        }),
-        ("P", _) => Some(ElectronegativityParams {
-            a: 8.90,
-            b: 8.24,
-            c: 0.96,
-        }),
-
-        // Silicon
-        ("Si", _) => Some(ElectronegativityParams {
-            a: 7.30,
-            b: 6.56,
-            c: 0.74,
-        }),
-
-        // Boron
-        ("B", _) => Some(ElectronegativityParams {
-            a: 6.88,
-            b: 5.98,
-            c: 0.68,
-        }),
-
-        // Default: use carbon SP3 parameters as fallback
-        _ => None,
-    }
+/// Looks up the parameters for an element/mode pair.
+fn lookup(symbol: &str, mode: &str) -> Option<ElectronegativityParams> {
+    PARAMS
+        .iter()
+        .find(|(e, m, ..)| *e == symbol && *m == mode)
+        .map(|&(_, _, a, b, c)| ElectronegativityParams { a, b, c })
 }
 
-/// Compute electronegativity for a given charge.
-fn electronegativity(params: &ElectronegativityParams, q: f64) -> f64 {
-    params.a + params.b * q + params.c * q * q
+/// Parameters for atom `idx`, choosing the mode the way RDKit does.
+fn atom_params(
+    mol: &Molecule,
+    adj: &AdjacencyList,
+    idx: usize,
+    hybridization: Hybridization,
+) -> Option<ElectronegativityParams> {
+    let element = get_element(&mol.atoms[idx].element)?;
+    let mode = match hybridization {
+        Hybridization::SP3 => "sp3",
+        Hybridization::SP2 => "sp2",
+        Hybridization::SP => "sp",
+        _ if element.atomic_number == 1 => "*",
+        _ if element.atomic_number == 16 => {
+            let oxygens = adj
+                .neighbor_atoms(idx)
+                .iter()
+                .filter(|&&n| {
+                    get_element(&mol.atoms[n].element).is_some_and(|e| e.atomic_number == 8)
+                })
+                .count();
+            match oxygens {
+                2 => "so2",
+                1 => "so",
+                _ => "sp3",
+            }
+        }
+        _ => return None,
+    };
+    // Hydrogen isotopes share hydrogen's parameters
+    let symbol = if element.atomic_number == 1 {
+        "H"
+    } else {
+        element.symbol
+    };
+    lookup(
+        symbol,
+        if element.atomic_number == 1 {
+            "*"
+        } else {
+            mode
+        },
+    )
+}
+
+/// Initial charges: formal charges, with the charge of an atom spread evenly
+/// over same-element atoms two conjugated bonds away (e.g. both carboxylate
+/// oxygens get -0.5), as in RDKit's `splitChargeConjugated`.
+fn initial_charges(mol: &Molecule, adj: &AdjacencyList, conjugated: &[bool]) -> Vec<f64> {
+    let n = mol.atom_count();
+    let mut charges = vec![0.0; n];
+    for i in 0..n {
+        let atom = &mol.atoms[i];
+        if atom.formal_charge == 0 || charges[i] != 0.0 {
+            continue;
+        }
+        let mut total = atom.formal_charge as f64;
+        let mut members = vec![i];
+        for &(middle, b1) in adj.neighbors(i) {
+            if !conjugated[b1] {
+                continue;
+            }
+            for &(other, b2) in adj.neighbors(middle) {
+                if b2 != b1 && conjugated[b2] && mol.atoms[other].element == atom.element {
+                    total += mol.atoms[other].formal_charge as f64;
+                    members.push(other);
+                }
+            }
+        }
+        let share = total / members.len() as f64;
+        for m in members {
+            charges[m] = share;
+        }
+    }
+    charges
 }
 
 /// Compute Gasteiger partial charges for all atoms.
 ///
-/// Uses the iterative PEOE algorithm with 6 iterations and 0.5 damping factor.
+/// Port of RDKit's `ComputeGasteigerCharges` (12 iterations): implicit
+/// hydrogens take part in the charge equalization, hydrogen uses the special
+/// ionization electronegativity 20.02, parameters depend on the perceived
+/// hybridization, and formal charges are first spread over conjugated
+/// same-element atoms. The returned charge of each atom excludes its implicit
+/// hydrogens (like RDKit's `_GasteigerCharge`); see
+/// [`gasteiger_charges_with_hydrogens`] for those.
+///
+/// Atoms without parameters (most metals) keep their formal charge and do not
+/// exchange charge; RDKit reports NaN for them instead.
 ///
 /// Returns a vector of partial charges of length `mol.atom_count()`.
-/// Returns all zeros if any atom has unknown electronegativity parameters.
 ///
 /// # Example
 ///
@@ -224,7 +203,15 @@ fn electronegativity(params: &ElectronegativityParams, q: f64) -> f64 {
 /// assert!(charges[1] < 0.0); // F is negative
 /// ```
 pub fn gasteiger_charges(mol: &Molecule) -> Vec<f64> {
-    gasteiger_charges_with_params(mol, 6, 0.5)
+    gasteiger_charges_with_params(mol, DEFAULT_ITERATIONS, DAMPING)
+}
+
+/// Gasteiger charges plus the total charge carried by each atom's implicit
+/// hydrogens: returns `(atom_charges, implicit_h_charges)`.
+///
+/// Summing both vectors gives the molecule's net formal charge.
+pub fn gasteiger_charges_with_hydrogens(mol: &Molecule) -> (Vec<f64>, Vec<f64>) {
+    compute(mol, DEFAULT_ITERATIONS, DAMPING)
 }
 
 /// Compute Gasteiger partial charges with custom parameters.
@@ -232,85 +219,77 @@ pub fn gasteiger_charges(mol: &Molecule) -> Vec<f64> {
 /// # Arguments
 ///
 /// * `mol` - The molecule
-/// * `max_iter` - Maximum number of iterations (typically 6-8)
-/// * `damping` - Damping factor (typically 0.5)
+/// * `max_iter` - Number of iterations (RDKit's default is 12)
+/// * `damping` - Damping factor, squared each iteration (typically 0.5)
 pub fn gasteiger_charges_with_params(mol: &Molecule, max_iter: usize, damping: f64) -> Vec<f64> {
+    compute(mol, max_iter, damping).0
+}
+
+fn compute(mol: &Molecule, max_iter: usize, damping: f64) -> (Vec<f64>, Vec<f64>) {
     let n = mol.atom_count();
     if n == 0 {
-        return vec![];
+        return (vec![], vec![]);
     }
 
     let adj = AdjacencyList::from_molecule(mol);
-
-    // Get electronegativity parameters for each atom
+    let hybridizations = all_hybridizations(mol);
+    let conjugated = all_conjugated_bonds(mol);
+    let implicit_h = all_implicit_hydrogen_counts(mol);
     let params: Vec<Option<ElectronegativityParams>> = (0..n)
-        .map(|i| {
-            let hyb = atom_hybridization(mol, i);
-            get_params(&mol.atoms[i].element, hyb)
+        .map(|i| atom_params(mol, &adj, i, hybridizations[i]))
+        .collect();
+    let hydrogen = lookup("H", "*").expect("hydrogen parameters");
+    let ion_x: Vec<f64> = (0..n)
+        .map(|i| match &params[i] {
+            _ if get_element(&mol.atoms[i].element).is_some_and(|e| e.atomic_number == 1) => {
+                HYDROGEN_ION_X
+            }
+            Some(p) => p.a + p.b + p.c,
+            None => 0.0,
         })
         .collect();
 
-    // Initialize charges from formal charges
-    let mut charges: Vec<f64> = mol.atoms.iter().map(|a| a.formal_charge as f64).collect();
+    let mut charges = initial_charges(mol, &adj, &conjugated);
+    let mut h_charges = vec![0.0; n];
+    let mut energy = vec![0.0; n];
+    let mut damp = damping;
 
-    // Iterative charge equalization
-    for iter in 0..max_iter {
-        let damp = damping.powi(iter as i32 + 1);
-        let mut charge_deltas = vec![0.0f64; n];
-
-        // For each bond, transfer charge from less electronegative to more
-        for bond in &mol.bonds {
-            let i = bond.atom1;
-            let j = bond.atom2;
-
-            if i >= n || j >= n {
-                continue;
-            }
-
-            let (params_i, params_j) = match (&params[i], &params[j]) {
-                (Some(pi), Some(pj)) => (pi, pj),
-                _ => continue,
-            };
-
-            let chi_i = electronegativity(params_i, charges[i]);
-            let chi_j = electronegativity(params_j, charges[j]);
-
-            // Charge flows from less electronegative to more electronegative
-            let delta_chi = chi_j - chi_i;
-
-            // Normalization: use the electronegativity of the positive end at q=+1
-            let chi_plus = if delta_chi > 0.0 {
-                electronegativity(params_i, 1.0)
-            } else {
-                electronegativity(params_j, 1.0)
-            };
-
-            if chi_plus.abs() < 1e-10 {
-                continue;
-            }
-
-            let transfer = damp * delta_chi / chi_plus;
-
-            charge_deltas[i] += transfer;
-            charge_deltas[j] -= transfer;
-        }
-
+    for _ in 0..max_iter {
         for i in 0..n {
-            charges[i] += charge_deltas[i];
+            if let Some(p) = &params[i] {
+                energy[i] = p.a + charges[i] * (p.b + p.c * charges[i]);
+            }
         }
+        for i in 0..n {
+            if params[i].is_none() {
+                continue;
+            }
+            let mut dq = 0.0;
+            for &(j, _) in adj.neighbors(i) {
+                if params[j].is_none() {
+                    continue;
+                }
+                // Normalize by χ+ of the electron donor (the less electronegative atom)
+                let dx = energy[j] - energy[i];
+                dq += dx / if dx < 0.0 { ion_x[j] } else { ion_x[i] };
+            }
+            // Implicit hydrogens exchange charge with their heavy atom only,
+            // so their charge is updated at the same time.
+            let num_h = implicit_h[i] as f64;
+            if num_h > 0.0 {
+                let q_h = h_charges[i] / num_h;
+                let h_energy = hydrogen.a + q_h * (hydrogen.b + hydrogen.c * q_h);
+                let dx = h_energy - energy[i];
+                let dq_h = dx / if dx < 0.0 { HYDROGEN_ION_X } else { ion_x[i] };
+                dq += num_h * dq_h;
+                h_charges[i] -= num_h * dq_h * damp;
+            }
+            charges[i] += damp * dq;
+        }
+        damp *= damping;
     }
 
-    // For atoms without parameters, set charge to 0
-    for i in 0..n {
-        if params[i].is_none() {
-            charges[i] = 0.0;
-        }
-    }
-
-    // Suppress unused variable warning
-    let _ = &adj;
-
-    charges
+    (charges, h_charges)
 }
 
 #[cfg(test)]
@@ -407,13 +386,35 @@ mod tests {
         mol.bonds.push(Bond::new(0, 1, BondOrder::Single));
         mol.bonds.push(Bond::new(1, 2, BondOrder::Single));
 
-        let charges = gasteiger_charges(&mol);
-        let total: f64 = charges.iter().sum();
+        // Heavy-atom-only ethanol: implicit hydrogens carry part of the charge
+        let (charges, h_charges) = gasteiger_charges_with_hydrogens(&mol);
+        let total: f64 = charges.iter().chain(h_charges.iter()).sum();
         assert!(
-            total.abs() < 0.1,
-            "Total charge should be ~0 for neutral molecule, got {}",
+            total.abs() < 1e-9,
+            "Total charge should be 0 for neutral molecule, got {}",
             total
         );
+        assert!(h_charges.iter().all(|&q| q > 0.0));
+    }
+
+    #[test]
+    fn test_conjugated_formal_charge_is_split() {
+        // Acetate: both oxygens start at -0.5 and end up equal
+        let mut mol = Molecule::new("acetate");
+        mol.atoms.push(Atom::new(0, "C", 0.0, 0.0, 0.0));
+        mol.atoms.push(Atom::new(1, "C", 1.5, 0.0, 0.0));
+        mol.atoms.push(Atom::new(2, "O", 2.2, 1.0, 0.0));
+        let mut o = Atom::new(3, "O", 2.2, -1.0, 0.0);
+        o.formal_charge = -1;
+        mol.atoms.push(o);
+        mol.bonds.push(Bond::new(0, 1, BondOrder::Single));
+        mol.bonds.push(Bond::new(1, 2, BondOrder::Double));
+        mol.bonds.push(Bond::new(1, 3, BondOrder::Single));
+
+        let (charges, h_charges) = gasteiger_charges_with_hydrogens(&mol);
+        assert!((charges[2] - charges[3]).abs() < 1e-9);
+        let total: f64 = charges.iter().chain(h_charges.iter()).sum();
+        assert!((total + 1.0).abs() < 1e-9);
     }
 
     #[test]

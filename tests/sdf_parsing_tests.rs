@@ -189,7 +189,7 @@ fn test_formula_ethanol() {
 #[test]
 fn test_formula_benzene() {
     let mol = parse_sdf_string(BENZENE_SDF).unwrap();
-    assert_eq!(mol.formula(), "C6");
+    assert_eq!(mol.formula(), "C6H6"); // implicit H on aromatic carbons
 }
 
 // ============================================================================

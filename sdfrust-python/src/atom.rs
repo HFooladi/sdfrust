@@ -120,6 +120,18 @@ impl PyAtom {
         self.inner.partial_charge = charge;
     }
 
+    /// If True, no implicit hydrogens are added to this atom (all H explicit).
+    #[getter]
+    pub fn no_implicit(&self) -> bool {
+        self.inner.no_implicit
+    }
+
+    /// Set whether implicit hydrogens are suppressed for this atom.
+    #[setter]
+    pub fn set_no_implicit(&mut self, value: bool) {
+        self.inner.no_implicit = value;
+    }
+
     /// MDL radical code (1 = singlet, 2 = doublet, 3 = triplet), or None.
     #[getter]
     pub fn radical(&self) -> Option<u8> {

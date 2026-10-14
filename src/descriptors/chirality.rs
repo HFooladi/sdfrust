@@ -1,8 +1,13 @@
 //! CIP chirality perception for tetrahedral stereocenters.
 //!
-//! Determines chirality tags (CW/CCW) using CIP priority assignment
-//! via BFS expansion, and R/S determination from 3D signed volume
-//! or 2D wedge/dash bond information. Provides OGB atom feature 1.
+//! Detects tetrahedral stereocenters (four substituents with distinct
+//! CIP-style ranks) and assigns RDKit-style chirality tags (CW/CCW) from the
+//! 3D signed volume or 2D wedge/dash bonds. Provides OGB atom feature 1.
+//!
+//! Note: CW/CCW are *not* R/S. Like RDKit's `ChiralType`, the tag describes
+//! the order of the atom's bonds as listed in the molecule (looking from the
+//! first neighbour, the others run clockwise or counterclockwise), so it
+//! depends on atom/bond ordering, while R/S depends on CIP priorities.
 //!
 //! # Example
 //!
@@ -45,9 +50,11 @@ const VOLUME_THRESHOLD: f64 = 0.01;
 pub enum ChiralTag {
     /// No chirality specified or not a stereocenter.
     Unspecified,
-    /// Clockwise (R configuration).
+    /// Neighbours (in bond order) run clockwise viewed from the first one.
+    /// This is RDKit's `CHI_TETRAHEDRAL_CW`, not the CIP label R.
     CW,
-    /// Counterclockwise (S configuration).
+    /// Neighbours (in bond order) run counterclockwise viewed from the first
+    /// one. This is RDKit's `CHI_TETRAHEDRAL_CCW`, not the CIP label S.
     CCW,
     /// Other chirality type.
     Other,
@@ -57,8 +64,8 @@ impl ChiralTag {
     /// Returns the OGB-compatible integer index.
     ///
     /// - 0 = Unspecified
-    /// - 1 = CW (R)
-    /// - 2 = CCW (S)
+    /// - 1 = CW
+    /// - 2 = CCW
     /// - 3 = Other
     pub fn to_ogb_index(&self) -> u8 {
         match self {
@@ -80,7 +87,7 @@ impl ChiralTag {
 /// Each subsequent layer = sorted (descending) atomic numbers at that BFS distance.
 /// Compared lexicographically: first divergent layer decides; higher atomic number = higher priority.
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct CipPriority {
+pub(crate) struct CipPriority {
     layers: Vec<Vec<u8>>,
 }
 
@@ -122,7 +129,7 @@ fn bond_multiplicity(order: BondOrder) -> usize {
 }
 
 /// Compute CIP priority for a substituent starting at `start_neighbor` of `center`.
-fn compute_cip_priority(
+pub(crate) fn compute_cip_priority(
     mol: &Molecule,
     adj: &AdjacencyList,
     center: usize,
@@ -260,8 +267,19 @@ fn is_potential_stereocenter(
 
     let elem = normalize_element(&mol.atoms[idx].element);
 
-    // Skip nitrogen (invertible pyramidal, not stereocenter in ML context)
-    if elem == "N" {
+    // Neutral nitrogen inverts; only quaternary/protonated N+ is a center
+    if elem == "N" && mol.atoms[idx].formal_charge != 1 {
+        return false;
+    }
+
+    // A carbon with a double or triple bond cannot be a tetrahedral center
+    // (guards against over-valent input that still counts as SP3)
+    if elem == "C"
+        && adj
+            .neighbors(idx)
+            .iter()
+            .any(|&(_, b)| matches!(mol.bonds[b].order, BondOrder::Double | BondOrder::Triple))
+    {
         return false;
     }
 
@@ -270,7 +288,10 @@ fn is_potential_stereocenter(
     let impl_h = implicit_hydrogen_count(mol, idx);
     let total = explicit + impl_h as usize;
 
-    if total != 4 {
+    // Sulfoxides/sulfonium (S, Se with three substituents) use their lone
+    // pair as the fourth
+    let lone_pair_center = total == 3 && matches!(elem.as_str(), "S" | "Se");
+    if total != 4 && !lone_pair_center {
         return false;
     }
 
@@ -279,8 +300,8 @@ fn is_potential_stereocenter(
         return false;
     }
 
-    // Allow: C, S, P, Se, Si, Ge
-    matches!(elem.as_str(), "C" | "S" | "P" | "Se" | "Si" | "Ge")
+    // Allow: C, N+, S, P, Se, Si, Ge
+    matches!(elem.as_str(), "C" | "N" | "S" | "P" | "Se" | "Si" | "Ge")
 }
 
 // ============================================================
@@ -428,8 +449,9 @@ fn signed_volume(subs: &[(f64, f64, f64); 4], center: &(f64, f64, f64)) -> f64 {
 
 /// Determine the chirality of atom `idx`.
 ///
-/// Uses CIP priority assignment and signed volume to detect
-/// R/S configuration. Returns `Unspecified` for non-stereocenters.
+/// Uses CIP-style ranking to detect stereocenters and the signed volume of
+/// the neighbours (in bond order) to assign CW/CCW, matching RDKit's chiral
+/// tags. Returns `Unspecified` for non-stereocenters.
 ///
 /// # Example
 ///
@@ -500,8 +522,10 @@ pub fn all_chiralities(mol: &Molecule) -> Vec<ChiralTag> {
         }
 
         // Collect substituents with CIP priorities for stereocenter detection
-        let mut explicit_neighbors = adj.neighbor_atoms(i);
-        explicit_neighbors.sort_unstable(); // canonical atom index order
+        // Neighbours in bond order: RDKit's CW/CCW is relative to the order of
+        // the atom's bonds in the molecule (for SMILES-derived files this is
+        // usually also atom-index order).
+        let explicit_neighbors = adj.neighbor_atoms(i);
         let impl_h = implicit_hydrogen_count(mol, i);
 
         let mut sub_priorities: Vec<(CipPriority, usize)> = Vec::with_capacity(4);
@@ -509,10 +533,18 @@ pub fn all_chiralities(mol: &Molecule) -> Vec<ChiralTag> {
             let priority = compute_cip_priority(mol, &adj, i, neighbor);
             sub_priorities.push((priority, neighbor));
         }
-        // Add implicit H (lowest possible priority)
+        // Add implicit H (lowest real priority) and, for sulfoxide-like
+        // centers, the lone pair (lower still); both go last, as in RDKit
+        let lone_pairs = usize::from(explicit_neighbors.len() + impl_h as usize == 3);
         for _ in 0..impl_h {
             let priority = CipPriority {
                 layers: vec![vec![1]],
+            };
+            sub_priorities.push((priority, usize::MAX));
+        }
+        for _ in 0..lone_pairs {
+            let priority = CipPriority {
+                layers: vec![vec![0]],
             };
             sub_priorities.push((priority, usize::MAX));
         }
@@ -532,19 +564,18 @@ pub fn all_chiralities(mol: &Molecule) -> Vec<ChiralTag> {
         }
 
         // Get positions for signed volume calculation.
-        // RDKit's CW/CCW is based on ATOM INDEX order (not CIP priority order).
-        // Explicit neighbors are already sorted by atom index.
-        // Implicit H goes last (highest virtual index).
+        // RDKit's CW/CCW is based on bond order (not CIP priority order).
+        // Implicit H goes last.
         let center_pos = if mol_is_2d {
             (mol.atoms[i].x, mol.atoms[i].y, 0.0)
         } else {
             (mol.atoms[i].x, mol.atoms[i].y, mol.atoms[i].z)
         };
 
-        // Build ordered neighbor list: explicit (by atom index) + implicit H last
+        // Build ordered neighbor list: explicit (bond order) + implicit H last
         let ordered_neighbors: Vec<usize> = {
             let mut v: Vec<usize> = explicit_neighbors.clone();
-            for _ in 0..impl_h {
+            for _ in 0..impl_h as usize + lone_pairs {
                 v.push(usize::MAX);
             }
             v
@@ -633,7 +664,7 @@ mod tests {
     #[test]
     fn test_chiral_3d_r() {
         // C with F, Cl, Br, H in 3D → R configuration
-        // Arrange so signed volume is negative → CW (R)
+        // Arrange so signed volume is negative → CW
         let mut mol = Molecule::new("r_chiral");
         mol.atoms.push(Atom::new(0, "C", 0.0, 0.0, 0.0));
         mol.atoms.push(Atom::new(1, "Br", -1.0, -1.0, 1.0));

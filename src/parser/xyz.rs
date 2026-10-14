@@ -163,6 +163,7 @@ impl<R: BufRead> XyzParser<R> {
             mass_difference: 0,
             isotope: None,
             partial_charge: None,
+            no_implicit: true,
             stereo_parity: None,
             hydrogen_count: None,
             valence: None,

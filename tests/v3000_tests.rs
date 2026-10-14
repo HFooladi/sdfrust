@@ -32,7 +32,7 @@ fn test_parse_v3000_benzene_file() {
     assert_eq!(mol.name, "benzene");
     assert_eq!(mol.atom_count(), 6);
     assert_eq!(mol.bond_count(), 6);
-    assert_eq!(mol.formula(), "C6");
+    assert_eq!(mol.formula(), "C6H6");
     assert!(mol.has_aromatic_bonds());
 
     // All bonds should be aromatic

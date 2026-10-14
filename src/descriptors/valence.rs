@@ -25,88 +25,45 @@
 //! assert_eq!(valence::implicit_hydrogen_count(&mol, 0), 0); // all H explicit
 //! ```
 
+use crate::descriptors::elements::{element_by_atomic_number, get_element};
 use crate::graph::{AdjacencyList, is_hydrogen};
 use crate::molecule::Molecule;
 
-/// Default valence for common elements at neutral charge.
+/// Allowed valences for an element with the given formal charge, following
+/// RDKit: a charged main-group atom uses the valences of the isoelectronic
+/// neutral element (atomic number minus charge). Otherwise the neutral list is
+/// shifted by the charge (reversed for early elements).
 ///
-/// Maps (element_symbol, formal_charge) → typical valence.
-/// Used to compute implicit hydrogen counts.
-fn default_valence(element: &str, charge: i8) -> Option<u8> {
-    // Normalize element symbol
-    let elem = element.trim();
-    let upper: String = elem
-        .chars()
-        .next()
-        .map(|c| c.to_uppercase().collect::<String>())
-        .unwrap_or_default()
-        + &elem.chars().skip(1).collect::<String>().to_lowercase();
-
-    match (upper.as_str(), charge) {
-        // Hydrogen
-        ("H", 0) => Some(1),
-        ("H", 1) => Some(0),
-        ("H", -1) => Some(0),
-        ("D", 0) | ("T", 0) => Some(1),
-
-        // Carbon
-        ("C", 0) => Some(4),
-        ("C", -1) => Some(3),
-        ("C", 1) => Some(3),
-
-        // Nitrogen
-        ("N", 0) => Some(3),
-        ("N", 1) => Some(4),
-        ("N", -1) => Some(2),
-
-        // Oxygen
-        ("O", 0) => Some(2),
-        ("O", 1) => Some(3),
-        ("O", -1) => Some(1),
-
-        // Fluorine
-        ("F", 0) => Some(1),
-
-        // Phosphorus
-        ("P", 0) => Some(3), // can also be 5
-        ("P", 1) => Some(4),
-
-        // Sulfur
-        ("S", 0) => Some(2), // can also be 4, 6
-        ("S", 1) => Some(3),
-        ("S", -1) => Some(1),
-
-        // Chlorine
-        ("Cl", 0) => Some(1),
-
-        // Bromine
-        ("Br", 0) => Some(1),
-
-        // Iodine
-        ("I", 0) => Some(1),
-
-        // Silicon
-        ("Si", 0) => Some(4),
-
-        // Boron
-        ("B", 0) => Some(3),
-        ("B", -1) => Some(4),
-
-        // Selenium
-        ("Se", 0) => Some(2),
-
-        // Arsenic
-        ("As", 0) => Some(3),
-
-        // Metals — typically no implicit H
-        (
-            "Na" | "K" | "Li" | "Ca" | "Mg" | "Fe" | "Cu" | "Zn" | "Mn" | "Co" | "Ni" | "Pt" | "Au"
-            | "Al",
-            _,
-        ) => Some(0),
-
-        _ => None,
+/// Returns `None` for unknown elements and `Some(&[])`-like empty results for
+/// elements that take any valence (metals), which get no implicit hydrogens.
+fn allowed_valences(element: &str, charge: i8) -> Option<Vec<i32>> {
+    let data = get_element(element)?;
+    if data.atomic_number == 1 && charge != 0 {
+        return Some(vec![0]); // H+ / H- carry no further hydrogens
     }
+    // A charged main-group atom takes the valences of its isoelectronic
+    // neutral element (N+ like C, O- like F, B- like C, B-2 like N, C+ like B)
+    if charge != 0 && !data.valences.is_empty() {
+        let iso = data.atomic_number as i32 - charge as i32;
+        if let Some(iso) = u8::try_from(iso)
+            .ok()
+            .and_then(element_by_atomic_number)
+            .filter(|e| !e.valences.is_empty())
+        {
+            return Some(iso.valences.iter().map(|&v| v as i32).collect());
+        }
+    }
+    let mut shift = charge as i32;
+    if data.outer_electrons < 4 || (data.atomic_number == 6 && charge > 0) {
+        shift = -shift;
+    }
+    Some(
+        data.valences
+            .iter()
+            .map(|&v| v as i32 + shift)
+            .filter(|&v| v >= 0)
+            .collect(),
+    )
 }
 
 /// Returns the degree (number of explicit bonds) for atom `idx`.
@@ -153,9 +110,10 @@ pub fn bond_order_sum_int(mol: &Molecule, idx: usize) -> u8 {
 
 /// Returns the implicit hydrogen count for atom `idx`.
 ///
-/// The implicit hydrogen count is:
-/// `max(0, default_valence - bond_order_sum - abs(charge))` if no explicit
-/// hydrogen_count is set on the atom, otherwise uses the SDF `hydrogen_count` field.
+/// Follows RDKit's valence model: the result fills the atom up to the smallest
+/// allowed valence (for its element and formal charge) that is at least
+/// `bond_order_sum + radical_electrons`. Metals and unknown elements get none.
+/// The molfile valence field (`vvv`) and hydrogen-count field override this.
 ///
 /// # Example
 ///
@@ -186,13 +144,33 @@ pub fn implicit_hydrogen_count(mol: &Molecule, idx: usize) -> u8 {
         }
     }
 
-    let valence = match default_valence(&atom.element, atom.formal_charge) {
-        Some(v) => v,
-        None => return 0,
-    };
+    if atom.no_implicit {
+        return 0;
+    }
 
-    let bo_sum = bond_order_sum_int(mol, idx);
-    valence.saturating_sub(bo_sum)
+    let bonds = bond_order_sum_int(mol, idx) as i32;
+
+    // An explicit valence from the molfile (vvv field) is bonds + hydrogens
+    // (radical electrons are not part of it); 15 means zero valence.
+    if let Some(v) = atom.valence {
+        return if v == 15 {
+            0
+        } else {
+            (v as i32 - bonds).clamp(0, u8::MAX as i32) as u8
+        };
+    }
+
+    let used = bonds + atom.radical_electrons() as i32;
+
+    // Smallest allowed valence that accommodates the explicit bonds and radicals.
+    let Some(valences) = allowed_valences(&atom.element, atom.formal_charge) else {
+        return 0;
+    };
+    valences
+        .iter()
+        .find(|&&v| v >= used)
+        .map(|&v| (v - used) as u8)
+        .unwrap_or(0)
 }
 
 /// Returns the total hydrogen count (implicit + explicit H neighbors) for atom `idx`.
@@ -389,7 +367,7 @@ mod tests {
 
     #[test]
     fn test_default_valence_unknown() {
-        assert_eq!(default_valence("Xx", 0), None);
+        assert_eq!(allowed_valences("Xx", 0), None);
     }
 
     #[test]

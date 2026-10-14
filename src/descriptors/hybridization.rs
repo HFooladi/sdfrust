@@ -19,8 +19,8 @@
 //! assert_eq!(atom_hybridization(&mol, 0), Hybridization::SP2);
 //! ```
 
-use crate::bond::BondOrder;
-use crate::graph::{AdjacencyList, is_hydrogen};
+use crate::descriptors::conjugation::{AtomEnvironment, conjugated_bonds};
+use crate::descriptors::elements::get_element;
 use crate::molecule::Molecule;
 
 /// Atom hybridization state.
@@ -57,14 +57,67 @@ impl Hybridization {
     }
 }
 
+/// Number of σ bonds plus lone pairs (RDKit's `numBondsPlusLonePairs`).
+fn bonds_plus_lone_pairs(mol: &Molecule, env: &AtomEnvironment, idx: usize) -> i32 {
+    let atom = &mol.atoms[idx];
+    let degree = env.total_degree(idx);
+    let Some(data) = get_element(&atom.element) else {
+        return degree;
+    };
+    if data.atomic_number <= 1 {
+        return degree;
+    }
+    if data.atomic_number >= 89 {
+        return degree; // actinides and beyond: just use the degree
+    }
+    let outer = data.outer_electrons as i32;
+    let valence = env.total_valence(idx);
+    let charge = atom.formal_charge as i32;
+    let free_electrons = outer - (valence + charge);
+    if valence + outer - charge < 8 {
+        // Below an octet: unpaired electrons occupy orbitals too
+        let radicals = atom.radical_electrons() as i32;
+        degree + (free_electrons - radicals) / 2 + radicals
+    } else {
+        degree + free_electrons / 2
+    }
+}
+
+/// Hybridization of every atom from precomputed environments (RDKit's
+/// `setHybridization`).
+fn hybridizations(
+    mol: &Molecule,
+    env: &AtomEnvironment,
+    conjugated: &[bool],
+) -> Vec<Hybridization> {
+    (0..mol.atom_count())
+        .map(|i| match bonds_plus_lone_pairs(mol, env, i) {
+            i32::MIN..=1 => Hybridization::S,
+            2 => Hybridization::SP,
+            3 => Hybridization::SP2,
+            4 => {
+                // An sp3-like atom next to a π system (amide N, ester O,
+                // pyrrole N) is sp2, unless it has 4 explicit neighbours.
+                let has_conjugated_bond = env.adj.neighbors(i).iter().any(|&(_, b)| conjugated[b]);
+                if env.adj.degree(i) < 4 && has_conjugated_bond {
+                    Hybridization::SP2
+                } else {
+                    Hybridization::SP3
+                }
+            }
+            5 => Hybridization::SP3D,
+            6 => Hybridization::SP3D2,
+            _ => Hybridization::Other,
+        })
+        .collect()
+}
+
 /// Determine the hybridization of atom `idx`.
 ///
-/// Inference rules:
-/// - Hydrogen atoms → S (single s orbital)
-/// - Any triple bond → SP
-/// - Any double bond or aromatic bond → SP2
-/// - Otherwise → SP3
-/// - Hypervalent: 5 bonds → SP3D, 6 bonds → SP3D2
+/// Uses the number of σ bonds plus lone pairs, as RDKit does: 2 → SP,
+/// 3 → SP2, 4 → SP3 (SP2 if the atom has a conjugated bond and fewer than four
+/// explicit neighbours), 5 → SP3D, 6 → SP3D2; hydrogen and isolated ions are S.
+/// For many atoms, prefer [`all_hybridizations`], which perceives the molecule once.
 ///
 /// # Example
 ///
@@ -84,61 +137,10 @@ pub fn atom_hybridization(mol: &Molecule, idx: usize) -> Hybridization {
     if idx >= mol.atoms.len() {
         return Hybridization::Other;
     }
-
-    // Hydrogen atoms use a single s orbital
-    if is_hydrogen(&mol.atoms[idx].element) {
-        return Hybridization::S;
-    }
-
-    let adj = AdjacencyList::from_molecule(mol);
-    let neighbors = adj.neighbors(idx);
-    let num_neighbors = neighbors.len();
-
-    // Collect bond orders for this atom
-    let mut has_triple = false;
-    let mut has_double = false;
-    let mut has_aromatic = false;
-
-    for &(_neighbor, bond_idx) in neighbors {
-        if let Some(bond) = mol.bonds.get(bond_idx) {
-            match bond.order {
-                BondOrder::Triple => has_triple = true,
-                BondOrder::Double => has_double = true,
-                BondOrder::Aromatic | BondOrder::SingleOrAromatic | BondOrder::DoubleOrAromatic => {
-                    has_aromatic = true
-                }
-                _ => {}
-            }
-        }
-    }
-
-    // Hypervalent atoms
-    if num_neighbors >= 6 {
-        return Hybridization::SP3D2;
-    }
-    if num_neighbors >= 5 {
-        return Hybridization::SP3D;
-    }
-
-    // Standard hybridization from bond orders
-    if has_triple {
-        Hybridization::SP
-    } else if has_double || has_aromatic {
-        Hybridization::SP2
-    } else if num_neighbors > 0 {
-        Hybridization::SP3
-    } else {
-        // Isolated atom
-        Hybridization::S
-    }
+    all_hybridizations(mol)[idx]
 }
 
 /// Compute hybridization for all atoms in the molecule.
-///
-/// Uses a two-pass approach:
-/// 1. Initial hybridization from bond orders
-/// 2. Upgrade O/N/S atoms from SP3 to SP2 if bonded to any SP2 neighbor
-///    (lone pair conjugation, matching RDKit behavior)
 ///
 /// Returns a vector of length `mol.atom_count()`.
 ///
@@ -158,43 +160,9 @@ pub fn atom_hybridization(mol: &Molecule, idx: usize) -> Hybridization {
 /// assert_eq!(hybs[1], Hybridization::SP3);
 /// ```
 pub fn all_hybridizations(mol: &Molecule) -> Vec<Hybridization> {
-    let n = mol.atom_count();
-    let mut hybs: Vec<Hybridization> = (0..n).map(|i| atom_hybridization(mol, i)).collect();
-
-    // Second pass: upgrade lone-pair atoms (O, N, S) from SP3 to SP2
-    // if they are bonded to any SP2 neighbor (lone pair conjugation).
-    // This matches RDKit's behavior for esters, carboxylic acids, amides, etc.
-    let adj = AdjacencyList::from_molecule(mol);
-    for i in 0..n {
-        if hybs[i] != Hybridization::SP3 {
-            continue;
-        }
-        if !has_lone_pair(&mol.atoms[i].element) {
-            continue;
-        }
-        // Check if any neighbor is SP2 or SP
-        for &(neighbor, _bond_idx) in adj.neighbors(i) {
-            if hybs[neighbor] == Hybridization::SP2 || hybs[neighbor] == Hybridization::SP {
-                hybs[i] = Hybridization::SP2;
-                break;
-            }
-        }
-    }
-
-    hybs
-}
-
-/// Check if an element has lone pairs that can participate in conjugation.
-fn has_lone_pair(element: &str) -> bool {
-    let elem = element.trim();
-    let upper: String = elem
-        .chars()
-        .next()
-        .map(|c| c.to_uppercase().collect::<String>())
-        .unwrap_or_default()
-        + &elem.chars().skip(1).collect::<String>().to_lowercase();
-
-    matches!(upper.as_str(), "O" | "N" | "S" | "Se" | "P")
+    let env = AtomEnvironment::new(mol);
+    let conjugated = conjugated_bonds(mol, &env);
+    hybridizations(mol, &env, &conjugated)
 }
 
 #[cfg(test)]

@@ -478,6 +478,7 @@ impl<R: BufRead> SdfParser<R> {
             mass_difference,
             isotope: None,
             partial_charge: None,
+            no_implicit: false,
             stereo_parity,
             hydrogen_count,
             valence,
@@ -552,7 +553,11 @@ impl<R: BufRead> SdfParser<R> {
 
         let stereo = if line.len() >= 12 {
             let stereo_code: u8 = line[9..12].trim().parse().unwrap_or(0);
-            BondStereo::from_sdf(stereo_code)
+            if order == BondOrder::Double && stereo_code == 3 {
+                BondStereo::Either // cis/trans unknown
+            } else {
+                BondStereo::from_sdf(stereo_code)
+            }
         } else {
             BondStereo::None
         };

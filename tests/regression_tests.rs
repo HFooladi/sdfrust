@@ -348,3 +348,474 @@ fn ogb_atom_features_match_ogb_reference_for_aspirin() {
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// Phase 2: implicit hydrogens and masses (values from RDKit 2025.09)
+// ---------------------------------------------------------------------------
+
+fn heavy(element: &str, charge: i8) -> Molecule {
+    let mut mol = Molecule::new(element);
+    let mut atom = Atom::new(0, element, 0.0, 0.0, 0.0);
+    atom.formal_charge = charge;
+    mol.atoms.push(atom);
+    mol
+}
+
+#[test]
+fn implicit_hydrogens_follow_charge_aware_valence() {
+    use sdfrust::descriptors::valence::implicit_hydrogen_count;
+    for (element, charge, expected) in [
+        ("C", 0, 4),
+        ("N", 1, 4),  // ammonium
+        ("O", -1, 1), // hydroxide
+        ("O", 1, 3),  // hydronium
+        ("C", 1, 3),  // methyl cation
+        ("C", -1, 3), // methyl anion
+        ("B", -1, 4), // borohydride
+        ("Fe", 2, 0), // metals take no implicit H
+        ("Cl", -1, 0),
+    ] {
+        assert_eq!(
+            implicit_hydrogen_count(&heavy(element, charge), 0),
+            expected,
+            "{element}{charge:+}"
+        );
+    }
+}
+
+#[test]
+fn methyl_radical_from_molfile_keeps_three_hydrogens() {
+    // As written by RDKit for [CH3]: valence field 3 and M  RAD doublet
+    let block = "\n     RDKit          2D\n\n  1  0  0  0  0  0  0  0  0  0999 V2000\n    0.0000    0.0000    0.0000 C   0  0  0  0  0  3  0  0  0  0  0  0\nM  RAD  1   1   2\nM  END\n";
+    let mol = parse_sdf_string(block).unwrap();
+    assert_eq!(mol.formula(), "CH3");
+}
+
+#[test]
+fn masses_and_formula_include_implicit_h_isotopes_and_charge() {
+    // Acetate, heavy atoms only: C2H3O2-
+    let mut mol = carbon_chain(2);
+    mol.atoms.push(Atom::new(2, "O", 0.0, 1.0, 0.0));
+    mol.atoms.push(Atom::new(3, "O", 0.0, -1.0, 0.0));
+    mol.atoms[3].formal_charge = -1;
+    mol.bonds.push(Bond::new(1, 2, BondOrder::Double));
+    mol.bonds.push(Bond::new(1, 3, BondOrder::Single));
+    assert_eq!(mol.formula(), "C2H3O2-");
+    assert!((mol.molecular_weight().unwrap() - 59.044).abs() < 1e-3);
+    assert!((mol.exact_mass().unwrap() - 59.013853).abs() < 1e-5);
+
+    // 13CH4 uses the isotope mass
+    let mut c13 = heavy("C", 0);
+    c13.atoms[0].isotope = Some(13);
+    assert!((c13.molecular_weight().unwrap() - 17.0354).abs() < 1e-3);
+    assert_eq!(c13.formula(), "CH4");
+
+    // Uranium is now a known element
+    assert!(heavy("U", 0).molecular_weight().is_some());
+}
+
+// ---------------------------------------------------------------------------
+// Phase 2: aromaticity on Kekulé input (RDKit's results as reference)
+// ---------------------------------------------------------------------------
+
+/// Builds a molecule from element symbols and (atom1, atom2, order) bonds.
+fn kekule(elements: &[&str], bonds: &[(usize, usize, u8)]) -> Molecule {
+    let mut mol = Molecule::new("k");
+    for (i, e) in elements.iter().enumerate() {
+        mol.atoms.push(Atom::new(i, e, 0.0, 0.0, 0.0));
+    }
+    for &(a, b, order) in bonds {
+        let order = match order {
+            1 => BondOrder::Single,
+            2 => BondOrder::Double,
+            _ => BondOrder::Triple,
+        };
+        mol.bonds.push(Bond::new(a, b, order));
+    }
+    mol
+}
+
+fn aromatic_atoms(mol: &Molecule) -> Vec<bool> {
+    sdfrust::descriptors::all_aromatic_atoms(mol)
+}
+
+#[test]
+fn kekule_naphthalene_with_single_fusion_bond_is_fully_aromatic() {
+    // C4a(4)=C5 and C8a(9)=C8: the fusion bond 4-9 is single
+    let mol = kekule(
+        &["C"; 10],
+        &[
+            (0, 1, 2),
+            (1, 2, 1),
+            (2, 3, 2),
+            (3, 4, 1),
+            (4, 9, 1),
+            (9, 0, 1),
+            (4, 5, 2),
+            (5, 6, 1),
+            (6, 7, 2),
+            (7, 8, 1),
+            (8, 9, 2),
+        ],
+    );
+    assert!(aromatic_atoms(&mol).iter().all(|&a| a));
+}
+
+#[test]
+fn azulene_is_aromatic_through_the_fused_union() {
+    let mol = kekule(
+        &["C"; 10],
+        &[
+            (0, 1, 2),
+            (1, 2, 1),
+            (2, 3, 2),
+            (3, 4, 1),
+            (4, 0, 1),
+            (4, 5, 2),
+            (5, 6, 1),
+            (6, 7, 2),
+            (7, 8, 1),
+            (8, 9, 2),
+            (9, 3, 1),
+        ],
+    );
+    assert!(aromatic_atoms(&mol).iter().all(|&a| a));
+}
+
+#[test]
+fn charged_and_exocyclic_rings() {
+    // Tropylium: three C=C plus an empty p orbital on C+
+    let mut tropylium = kekule(
+        &["C"; 7],
+        &[
+            (0, 1, 2),
+            (1, 2, 1),
+            (2, 3, 2),
+            (3, 4, 1),
+            (4, 5, 2),
+            (5, 6, 1),
+            (6, 0, 1),
+        ],
+    );
+    tropylium.atoms[6].formal_charge = 1;
+    assert!(aromatic_atoms(&tropylium).iter().all(|&a| a));
+
+    // 2-Pyridone: the C=O carbon contributes an empty orbital
+    let pyridone = kekule(
+        &["N", "C", "C", "C", "C", "C", "O"],
+        &[
+            (0, 1, 1),
+            (1, 2, 1),
+            (2, 3, 2),
+            (3, 4, 1),
+            (4, 5, 2),
+            (5, 0, 1),
+            (1, 6, 2),
+        ],
+    );
+    assert!(aromatic_atoms(&pyridone)[..6].iter().all(|&a| a));
+
+    // Thiophene S-oxide is not aromatic
+    let s_oxide = kekule(
+        &["S", "C", "C", "C", "C", "O"],
+        &[
+            (0, 1, 1),
+            (1, 2, 2),
+            (2, 3, 1),
+            (3, 4, 2),
+            (4, 0, 1),
+            (0, 5, 2),
+        ],
+    );
+    assert!(aromatic_atoms(&s_oxide).iter().all(|&a| !a));
+
+    // Cyclohexa-1,3-diene is not aromatic
+    let diene = kekule(
+        &["C"; 6],
+        &[
+            (0, 1, 2),
+            (1, 2, 1),
+            (2, 3, 2),
+            (3, 4, 1),
+            (4, 5, 1),
+            (5, 0, 1),
+        ],
+    );
+    assert!(aromatic_atoms(&diene).iter().all(|&a| !a));
+}
+
+#[test]
+fn azulene_fusion_bond_is_not_aromatic() {
+    let mol = kekule(
+        &["C"; 10],
+        &[
+            (0, 1, 2),
+            (1, 2, 1),
+            (2, 3, 2),
+            (3, 4, 1),
+            (4, 0, 1),
+            (4, 5, 2),
+            (5, 6, 1),
+            (6, 7, 2),
+            (7, 8, 1),
+            (8, 9, 2),
+            (9, 3, 1),
+        ],
+    );
+    let bonds = sdfrust::descriptors::all_aromatic_bonds(&mol);
+    assert!(!bonds[3], "fusion bond 3-4");
+    assert_eq!(bonds.iter().filter(|&&b| b).count(), 10);
+}
+
+// ---------------------------------------------------------------------------
+// Phase 2: hybridization and conjugation (RDKit's results as reference)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn hybridization_matches_rdkit_for_former_failures() {
+    use sdfrust::descriptors::Hybridization::*;
+    use sdfrust::descriptors::all_hybridizations;
+    let hyb = |mol: &Molecule, i: usize| all_hybridizations(mol)[i];
+
+    // Allene C=C=C: central carbon is SP
+    let allene = kekule(&["C", "C", "C"], &[(0, 1, 2), (1, 2, 2)]);
+    assert_eq!(hyb(&allene, 1), SP);
+
+    // Methyl azide C-N=[N+]=[N-]: central N is SP
+    let mut azide = kekule(&["C", "N", "N", "N"], &[(0, 1, 1), (1, 2, 2), (2, 3, 2)]);
+    azide.atoms[2].formal_charge = 1;
+    azide.atoms[3].formal_charge = -1;
+    assert_eq!(hyb(&azide, 2), SP);
+
+    // Dimethyl sulfone and DMSO: S is SP3
+    let sulfone = kekule(
+        &["C", "S", "C", "O", "O"],
+        &[(0, 1, 1), (1, 2, 1), (1, 3, 2), (1, 4, 2)],
+    );
+    assert_eq!(hyb(&sulfone, 1), SP3);
+    let dmso = kekule(&["C", "S", "C", "O"], &[(0, 1, 1), (1, 2, 1), (1, 3, 2)]);
+    assert_eq!(hyb(&dmso, 1), SP3);
+
+    // Acetamide: amide N is SP2 (conjugated lone pair); methyl C is SP3
+    let amide = kekule(&["C", "C", "O", "N"], &[(0, 1, 1), (1, 2, 2), (1, 3, 1)]);
+    assert_eq!(hyb(&amide, 3), SP2);
+    assert_eq!(hyb(&amide, 0), SP3);
+
+    // Methyl cation is SP2; isolated carbon (methane) is SP3; boronic B is SP2
+    let mut cation = heavy("C", 1);
+    cation.atoms[0].formal_charge = 1;
+    assert_eq!(hyb(&cation, 0), SP2);
+    assert_eq!(hyb(&heavy("C", 0), 0), SP3);
+    let boronic = kekule(&["C", "B", "O", "O"], &[(0, 1, 1), (1, 2, 1), (1, 3, 1)]);
+    assert_eq!(hyb(&boronic, 1), SP2);
+
+    // atom_hybridization agrees with all_hybridizations
+    for i in 0..amide.atom_count() {
+        assert_eq!(
+            sdfrust::descriptors::atom_hybridization(&amide, i),
+            hyb(&amide, i)
+        );
+    }
+}
+
+#[test]
+fn conjugation_matches_rdkit_for_former_failures() {
+    use sdfrust::descriptors::all_conjugated_bonds;
+    let benzene_ring = [
+        (0, 1, 2),
+        (1, 2, 1),
+        (2, 3, 2),
+        (3, 4, 1),
+        (4, 5, 2),
+        (5, 0, 1),
+    ];
+
+    // Benzonitrile: the ring-C≡N single bond is conjugated
+    let mut bonds = benzene_ring.to_vec();
+    bonds.extend([(0, 6, 1), (6, 7, 3)]);
+    let benzonitrile = kekule(&["C", "C", "C", "C", "C", "C", "C", "N"], &bonds);
+    assert!(all_conjugated_bonds(&benzonitrile)[6]);
+
+    // Anilinium: the ring-N+ bond is not conjugated
+    let mut bonds = benzene_ring.to_vec();
+    bonds.push((0, 6, 1));
+    let mut anilinium = kekule(&["C", "C", "C", "C", "C", "C", "N"], &bonds);
+    anilinium.atoms[6].formal_charge = 1;
+    assert!(!all_conjugated_bonds(&anilinium)[6]);
+
+    // Thiophenol: the ring-SH bond is not conjugated, phenol's ring-OH is
+    let thiophenol = kekule(&["C", "C", "C", "C", "C", "C", "S"], &bonds);
+    assert!(!all_conjugated_bonds(&thiophenol)[6]);
+    let phenol = kekule(&["C", "C", "C", "C", "C", "C", "O"], &bonds);
+    assert!(all_conjugated_bonds(&phenol)[6]);
+
+    // Dimethyl sulfone: nothing is conjugated
+    let sulfone = kekule(
+        &["C", "S", "C", "O", "O"],
+        &[(0, 1, 1), (1, 2, 1), (1, 3, 2), (1, 4, 2)],
+    );
+    assert!(all_conjugated_bonds(&sulfone).iter().all(|&c| !c));
+}
+
+#[test]
+fn gasteiger_matches_rdkit_values() {
+    // Reference: RDKit 2025.09 ComputeGasteigerCharges on heavy-atom-only SMILES
+    use sdfrust::descriptors::gasteiger_charges_with_hydrogens;
+    let ethanol = kekule(&["C", "C", "O"], &[(0, 1, 1), (1, 2, 1)]);
+    let (q, h) = gasteiger_charges_with_hydrogens(&ethanol);
+    for (ours, rdkit) in q.iter().zip([-0.0418, 0.0402, -0.3967]) {
+        assert!((ours - rdkit).abs() < 1e-4, "{ours} vs {rdkit}");
+    }
+    for (ours, rdkit) in h.iter().zip([0.0761, 0.1121, 0.2100]) {
+        assert!((ours - rdkit).abs() < 1e-4, "{ours} vs {rdkit}");
+    }
+}
+
+#[test]
+fn rotatable_bonds_follow_rdkit_strict_definition() {
+    use sdfrust::descriptors::rotatable_bond_count;
+    // N-methylacetamide CNC(C)=O: the amide bond is excluded -> 0
+    let amide = kekule(
+        &["C", "N", "C", "C", "O"],
+        &[(0, 1, 1), (1, 2, 1), (2, 3, 1), (2, 4, 2)],
+    );
+    assert_eq!(rotatable_bond_count(&amide), 0);
+
+    // Methyl propanoate CCC(=O)OC: only CH3CH2-C(=O)... C-C(=O) counts -> 1
+    let ester = kekule(
+        &["C", "C", "C", "O", "O", "C"],
+        &[(0, 1, 1), (1, 2, 1), (2, 3, 2), (2, 4, 1), (4, 5, 1)],
+    );
+    assert_eq!(rotatable_bond_count(&ester), 1);
+
+    // Benzonitrile and trifluorotoluene: triple-bond / CF3 ends excluded -> 0
+    let ring = [
+        (0, 1, 2),
+        (1, 2, 1),
+        (2, 3, 2),
+        (3, 4, 1),
+        (4, 5, 2),
+        (5, 0, 1),
+    ];
+    let mut bonds = ring.to_vec();
+    bonds.extend([(0, 6, 1), (6, 7, 3)]);
+    assert_eq!(
+        rotatable_bond_count(&kekule(&["C", "C", "C", "C", "C", "C", "C", "N"], &bonds)),
+        0
+    );
+    let mut bonds = ring.to_vec();
+    bonds.extend([(0, 6, 1), (6, 7, 1), (6, 8, 1), (6, 9, 1)]);
+    assert_eq!(
+        rotatable_bond_count(&kekule(
+            &["C", "C", "C", "C", "C", "C", "C", "F", "F", "F"],
+            &bonds
+        )),
+        0
+    );
+
+    // Butane: one rotatable bond whether hydrogens are explicit or implicit
+    assert_eq!(rotatable_bond_count(&carbon_chain(4)), 1);
+}
+
+#[test]
+fn ecfp_identifiers_match_rdkit_morgan() {
+    use sdfrust::fingerprints::ecfp::{ecfp, ecfp_counts};
+    // RDKit 2025.09: GetMorganGenerator(radius=r).GetSparseCountFingerprint
+    let ethanol = kekule(&["C", "C", "O"], &[(0, 1, 1), (1, 2, 1)]);
+    let mut ids: Vec<u32> = ecfp_counts(&ethanol, 1).counts.into_keys().collect();
+    ids.sort_unstable();
+    assert_eq!(
+        ids,
+        vec![
+            864662311, 1535166686, 2245384272, 2246728737, 3542456614, 4018048386
+        ]
+    );
+
+    // Kekulé benzene gives the same identifiers as RDKit's aromatic benzene
+    let benzene = kekule(
+        &["C"; 6],
+        &[
+            (0, 1, 2),
+            (1, 2, 1),
+            (2, 3, 2),
+            (3, 4, 1),
+            (4, 5, 2),
+            (5, 0, 1),
+        ],
+    );
+    let mut ids: Vec<u32> = ecfp_counts(&benzene, 2).counts.into_keys().collect();
+    ids.sort_unstable();
+    assert_eq!(ids, vec![98513984, 2763854213, 3218693969]);
+
+    // Folding is identifier % n_bits, as in RDKit
+    let fp = ecfp(&benzene, 2, 2048);
+    let expected: Vec<usize> = {
+        let mut v: Vec<usize> = [98513984u32, 2763854213, 3218693969]
+            .iter()
+            .map(|&i| i as usize % 2048)
+            .collect();
+        v.sort_unstable();
+        v
+    };
+    assert_eq!(fp.on_bits(), expected);
+}
+
+#[test]
+fn charged_atoms_use_isoelectronic_valences() {
+    use sdfrust::descriptors::valence::implicit_hydrogen_count;
+    // Boronate [B-2](C)(O)O from PDBbind 2vgc: B-2 is isoelectronic with N -> no H
+    let mut boronate = kekule(&["B", "C", "O", "O"], &[(0, 1, 1), (0, 2, 1), (0, 3, 1)]);
+    boronate.atoms[0].formal_charge = -2;
+    assert_eq!(implicit_hydrogen_count(&boronate, 0), 0);
+    // Sulfonium-like S+ with two bonds behaves like P: one H
+    let mut sulfonium = kekule(&["S", "C", "C"], &[(0, 1, 1), (0, 2, 1)]);
+    sulfonium.atoms[0].formal_charge = 1;
+    assert_eq!(implicit_hydrogen_count(&sulfonium, 0), 1);
+}
+
+#[test]
+fn protonated_nitrogen_and_sulfoxide_can_be_stereocenters() {
+    use sdfrust::descriptors::chirality::{ChiralTag, all_chiralities};
+    // Methyl ethyl propyl ammonium (N+ with H), tetrahedral 3D geometry
+    let mut ammonium = Molecule::new("ammonium");
+    for (i, (e, x, y, z)) in [
+        ("N", 0.0, 0.0, 0.0),
+        ("C", 1.0, 1.0, 1.0),
+        ("C", -1.0, -1.0, 1.0),
+        ("C", -1.0, 1.0, -1.0),
+        ("H", 0.6, -0.6, -0.6),
+        ("C", 2.0, 1.0, 1.0),
+        ("C", -2.0, -1.0, 1.0),
+        ("C", -3.0, -1.0, 1.0),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        ammonium.atoms.push(Atom::new(i, e, x, y, z));
+    }
+    ammonium.atoms[0].formal_charge = 1;
+    for (a, b) in [(0, 1), (0, 2), (0, 3), (0, 4), (1, 5), (2, 6), (6, 7)] {
+        ammonium.bonds.push(Bond::new(a, b, BondOrder::Single));
+    }
+    assert_ne!(all_chiralities(&ammonium)[0], ChiralTag::Unspecified);
+
+    // Methyl ethyl sulfoxide: S with =O, CH3, CH2CH3 and a lone pair
+    let mut sulfoxide = Molecule::new("sulfoxide");
+    for (i, (e, x, y, z)) in [
+        ("S", 0.0, 0.0, 0.0),
+        ("O", 0.0, 0.0, 1.5),
+        ("C", 1.5, 0.0, -0.5),
+        ("C", -0.8, 1.3, -0.5),
+        ("C", -0.8, 2.6, 0.2),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        sulfoxide.atoms.push(Atom::new(i, e, x, y, z));
+    }
+    sulfoxide.bonds.push(Bond::new(0, 1, BondOrder::Double));
+    sulfoxide.bonds.push(Bond::new(0, 2, BondOrder::Single));
+    sulfoxide.bonds.push(Bond::new(0, 3, BondOrder::Single));
+    sulfoxide.bonds.push(Bond::new(3, 4, BondOrder::Single));
+    assert_ne!(all_chiralities(&sulfoxide)[0], ChiralTag::Unspecified);
+}

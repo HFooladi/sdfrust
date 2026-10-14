@@ -1,9 +1,13 @@
 //! Conjugation detection for bonds.
 //!
-//! A bond is conjugated if:
-//! - It is an aromatic bond, OR
-//! - It is a single bond between two SP2 atoms, OR
-//! - It is a double bond adjacent to another double or aromatic bond
+//! Follows RDKit's rules (`MolOps::setConjugation`):
+//! - Aromatic bonds are conjugated.
+//! - For an atom with 2 or 3 connections (including hydrogens) that carries a
+//!   double, triple or aromatic bond, that bond and each of its other bonds are
+//!   conjugated when the neighbour on the other side has at most 3
+//!   connections. Both atoms must be able to take part in a π system (have a
+//!   π bond or a lone pair); atoms from groups 15/16 below the first row
+//!   (P, S, ...) only qualify when terminal, as in RDKit.
 //!
 //! Completes all 3 OGB bond features (bond_type, stereo, is_conjugated).
 //!
@@ -25,20 +29,136 @@
 //!
 //! let conj = conjugation::all_conjugated_bonds(&mol);
 //! assert!(conj[0]); // C=C is conjugated
-//! assert!(conj[1]); // C-C between two SP2 atoms is conjugated
+//! assert!(conj[1]); // C-C between two C=C is conjugated
 //! assert!(conj[2]); // C=C is conjugated
 //! ```
 
 use crate::bond::BondOrder;
-use crate::descriptors::hybridization::{Hybridization, all_hybridizations};
+use crate::descriptors::aromaticity::all_aromatic_bonds;
+use crate::descriptors::elements::get_element;
+use crate::descriptors::valence::all_implicit_hydrogen_counts;
+use crate::graph::AdjacencyList;
 use crate::molecule::Molecule;
+
+/// Per-atom quantities shared by conjugation and hybridization perception.
+pub(crate) struct AtomEnvironment {
+    pub adj: AdjacencyList,
+    /// Implicit hydrogen count per atom.
+    pub implicit_h: Vec<u8>,
+    /// Sum of explicit bond orders per atom (aromatic = 1.5, rounded).
+    pub bond_valence: Vec<i32>,
+    /// Perceived aromaticity per bond.
+    pub aromatic_bonds: Vec<bool>,
+}
+
+impl AtomEnvironment {
+    pub fn new(mol: &Molecule) -> Self {
+        let adj = AdjacencyList::from_molecule(mol);
+        let bond_valence = (0..mol.atom_count())
+            .map(|i| {
+                adj.neighbors(i)
+                    .iter()
+                    .map(|&(_, b)| mol.bonds[b].order.order())
+                    .sum::<f64>()
+                    .round() as i32
+            })
+            .collect();
+        Self {
+            implicit_h: all_implicit_hydrogen_counts(mol),
+            bond_valence,
+            aromatic_bonds: all_aromatic_bonds(mol),
+            adj,
+        }
+    }
+
+    /// Explicit neighbours plus implicit hydrogens.
+    pub fn total_degree(&self, idx: usize) -> i32 {
+        self.adj.degree(idx) as i32 + self.implicit_h[idx] as i32
+    }
+
+    /// Bond orders plus implicit hydrogens.
+    pub fn total_valence(&self, idx: usize) -> i32 {
+        self.bond_valence[idx] + self.implicit_h[idx] as i32
+    }
+}
+
+/// Electrons atom `idx` can donate to a π system (RDKit's `countAtomElec`);
+/// negative if it cannot take part in one.
+fn count_atom_electrons(mol: &Molecule, env: &AtomEnvironment, idx: usize) -> i32 {
+    let atom = &mol.atoms[idx];
+    let Some(data) = get_element(&atom.element) else {
+        return -1;
+    };
+    let default_valence = data.valences.first().map_or(-1, |&v| v as i32);
+    if default_valence <= 1 {
+        return -1; // univalent elements can't be conjugated
+    }
+    let degree = env.total_degree(idx);
+    if degree > 3 {
+        return -1;
+    }
+    let lone_pair_electrons =
+        (data.outer_electrons as i32 - default_valence - atom.formal_charge as i32).max(0);
+    let mut electrons =
+        (default_valence - degree) + lone_pair_electrons - atom.radical_electrons() as i32;
+    let unsaturations = env.bond_valence[idx] - env.adj.degree(idx) as i32;
+    if electrons > 1 && unsaturations > 1 {
+        electrons = 1; // a triple bond only offers one electron to the system
+    }
+    electrons
+}
+
+/// Whether atom `idx` can extend a conjugated system (RDKit's `isAtomConjugCand`).
+fn is_conjugation_candidate(mol: &Molecule, env: &AtomEnvironment, idx: usize) -> bool {
+    let Some(data) = get_element(&mol.atoms[idx].element) else {
+        return false;
+    };
+    let outer = data.outer_electrons;
+    let element_ok = data.atomic_number <= 10
+        || (outer != 5 && outer != 6)
+        || (outer == 6 && env.total_degree(idx) < 2);
+    element_ok && count_atom_electrons(mol, env, idx) > 0
+}
+
+/// Conjugation flags for every bond, using precomputed atom environments.
+pub(crate) fn conjugated_bonds(mol: &Molecule, env: &AtomEnvironment) -> Vec<bool> {
+    let mut conjugated = env.aromatic_bonds.clone();
+    let is_unsaturated = |b: usize| {
+        env.aromatic_bonds[b]
+            || matches!(
+                mol.bonds[b].order,
+                BondOrder::Double | BondOrder::Triple | BondOrder::Aromatic
+            )
+    };
+
+    for atom in 0..mol.atom_count() {
+        let degree = env.total_degree(atom);
+        if !(2..=3).contains(&degree) || !is_conjugation_candidate(mol, env, atom) {
+            continue;
+        }
+        let bonds = env.adj.neighbors(atom);
+        for &(_, b1) in bonds {
+            if !is_unsaturated(b1) {
+                continue;
+            }
+            for &(other, b2) in bonds {
+                if b1 == b2 || env.total_degree(other) > 3 {
+                    continue;
+                }
+                if is_conjugation_candidate(mol, env, other) {
+                    conjugated[b1] = true;
+                    conjugated[b2] = true;
+                }
+            }
+        }
+    }
+    conjugated
+}
 
 /// Check if a bond is conjugated.
 ///
-/// A bond is conjugated if any of these conditions hold:
-/// - It is aromatic
-/// - It is a single bond and both atoms are SP2 hybridized
-/// - It is a double bond adjacent to another double or aromatic bond
+/// For many bonds, prefer [`all_conjugated_bonds`], which perceives the
+/// molecule once.
 ///
 /// # Example
 ///
@@ -57,79 +177,7 @@ use crate::molecule::Molecule;
 /// assert!(conjugation::is_conjugated_bond(&mol, 0));
 /// ```
 pub fn is_conjugated_bond(mol: &Molecule, bond_idx: usize) -> bool {
-    let bond = match mol.bonds.get(bond_idx) {
-        Some(b) => b,
-        None => return false,
-    };
-
-    // Rule 1: Aromatic bonds are always conjugated
-    if bond.is_aromatic() {
-        return true;
-    }
-
-    let hybs = all_hybridizations(mol);
-
-    // Rule 2: Single bond between two SP2 atoms
-    if bond.order == BondOrder::Single {
-        let hyb1 = hybs
-            .get(bond.atom1)
-            .copied()
-            .unwrap_or(Hybridization::Other);
-        let hyb2 = hybs
-            .get(bond.atom2)
-            .copied()
-            .unwrap_or(Hybridization::Other);
-        if hyb1 == Hybridization::SP2 && hyb2 == Hybridization::SP2 {
-            return true;
-        }
-    }
-
-    // Rule 3: Double/triple bond adjacent to unsaturation
-    if bond.order == BondOrder::Double || bond.order == BondOrder::Triple {
-        let hybs = all_hybridizations(mol);
-        let hyb1 = hybs
-            .get(bond.atom1)
-            .copied()
-            .unwrap_or(Hybridization::Other);
-        let hyb2 = hybs
-            .get(bond.atom2)
-            .copied()
-            .unwrap_or(Hybridization::Other);
-        let is_sp2_or_sp = |h: Hybridization| h == Hybridization::SP2 || h == Hybridization::SP;
-
-        if is_sp2_or_sp(hyb1) && is_sp2_or_sp(hyb2) {
-            for (other_idx, other_bond) in mol.bonds.iter().enumerate() {
-                if other_idx == bond_idx {
-                    continue;
-                }
-                let shares_atom =
-                    other_bond.contains_atom(bond.atom1) || other_bond.contains_atom(bond.atom2);
-                if shares_atom
-                    && (other_bond.order == BondOrder::Double
-                        || other_bond.order == BondOrder::Triple
-                        || other_bond.is_aromatic()
-                        || {
-                            if other_bond.order == BondOrder::Single {
-                                let other_end = if other_bond.contains_atom(bond.atom1) {
-                                    other_bond.other_atom(bond.atom1).unwrap_or(usize::MAX)
-                                } else {
-                                    other_bond.other_atom(bond.atom2).unwrap_or(usize::MAX)
-                                };
-                                let other_hyb =
-                                    hybs.get(other_end).copied().unwrap_or(Hybridization::Other);
-                                is_sp2_or_sp(other_hyb)
-                            } else {
-                                false
-                            }
-                        })
-                {
-                    return true;
-                }
-            }
-        }
-    }
-
-    false
+    bond_idx < mol.bond_count() && all_conjugated_bonds(mol)[bond_idx]
 }
 
 /// Compute conjugation for all bonds in the molecule.
@@ -151,93 +199,10 @@ pub fn is_conjugated_bond(mol: &Molecule, bond_idx: usize) -> bool {
 /// assert!(!conj[0]); // C-C single bond between SP3 atoms
 /// ```
 pub fn all_conjugated_bonds(mol: &Molecule) -> Vec<bool> {
-    let m = mol.bond_count();
-    if m == 0 {
+    if mol.bond_count() == 0 {
         return vec![];
     }
-
-    let hybs = all_hybridizations(mol);
-    let mut result = vec![false; m];
-
-    for (bond_idx, bond) in mol.bonds.iter().enumerate() {
-        // Rule 1: Aromatic
-        if bond.is_aromatic() {
-            result[bond_idx] = true;
-            continue;
-        }
-
-        // Rule 2: Single bond between SP2 atoms
-        if bond.order == BondOrder::Single {
-            let hyb1 = hybs
-                .get(bond.atom1)
-                .copied()
-                .unwrap_or(Hybridization::Other);
-            let hyb2 = hybs
-                .get(bond.atom2)
-                .copied()
-                .unwrap_or(Hybridization::Other);
-            if hyb1 == Hybridization::SP2 && hyb2 == Hybridization::SP2 {
-                result[bond_idx] = true;
-                continue;
-            }
-        }
-
-        // Rule 3: Double/triple bond where both atoms are SP2 (or SP)
-        // This covers cases like butadiene C=C-C=C where each C=C bond
-        // has SP2 atoms on both sides.
-        if bond.order == BondOrder::Double || bond.order == BondOrder::Triple {
-            let hyb1 = hybs
-                .get(bond.atom1)
-                .copied()
-                .unwrap_or(Hybridization::Other);
-            let hyb2 = hybs
-                .get(bond.atom2)
-                .copied()
-                .unwrap_or(Hybridization::Other);
-            let is_sp2_or_sp = |h: Hybridization| h == Hybridization::SP2 || h == Hybridization::SP;
-            if is_sp2_or_sp(hyb1) && is_sp2_or_sp(hyb2) {
-                // Check if either atom has another unsaturated neighbor
-                let mut is_conj = false;
-                for (other_idx, other_bond) in mol.bonds.iter().enumerate() {
-                    if other_idx == bond_idx {
-                        continue;
-                    }
-                    let shares_atom = other_bond.contains_atom(bond.atom1)
-                        || other_bond.contains_atom(bond.atom2);
-                    if shares_atom
-                        && (other_bond.order == BondOrder::Double
-                            || other_bond.order == BondOrder::Triple
-                            || other_bond.is_aromatic()
-                            || {
-                                // Single bond to another SP2 atom (conjugation chain)
-                                if other_bond.order == BondOrder::Single {
-                                    let other_end = if other_bond.contains_atom(bond.atom1) {
-                                        other_bond.other_atom(bond.atom1).unwrap_or(usize::MAX)
-                                    } else {
-                                        other_bond.other_atom(bond.atom2).unwrap_or(usize::MAX)
-                                    };
-                                    let other_hyb = hybs
-                                        .get(other_end)
-                                        .copied()
-                                        .unwrap_or(Hybridization::Other);
-                                    is_sp2_or_sp(other_hyb)
-                                } else {
-                                    false
-                                }
-                            })
-                    {
-                        is_conj = true;
-                        break;
-                    }
-                }
-                if is_conj {
-                    result[bond_idx] = true;
-                }
-            }
-        }
-    }
-
-    result
+    conjugated_bonds(mol, &AtomEnvironment::new(mol))
 }
 
 #[cfg(test)]

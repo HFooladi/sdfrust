@@ -39,7 +39,7 @@ $$$$
     let mol = parse_sdf_string(sdf).unwrap();
     assert_eq!(mol.atom_count(), 1);
     assert_eq!(mol.bond_count(), 0);
-    assert_eq!(mol.formula(), "C");
+    assert_eq!(mol.formula(), "CH4"); // implicit hydrogens, as in RDKit
 }
 
 #[test]
@@ -352,7 +352,8 @@ $$$$
 "#;
 
     let mol = parse_sdf_string(sdf).unwrap();
-    assert_eq!(mol.formula(), "BrClFI");
+    // Each isolated halogen carries one implicit H (HF, HCl, HBr, HI)
+    assert_eq!(mol.formula(), "H4BrClFI");
 }
 
 #[test]
@@ -570,6 +571,8 @@ fn test_roundtrip_preserves_properties() {
 fn test_formula_single_element() {
     let mut mol = Molecule::new("single");
     mol.atoms.push(Atom::new(0, "C", 0.0, 0.0, 0.0));
+    assert_eq!(mol.formula(), "CH4");
+    mol.atoms[0].no_implicit = true;
     assert_eq!(mol.formula(), "C");
 }
 
@@ -581,6 +584,9 @@ fn test_formula_ordering() {
     mol.atoms.push(Atom::new(1, "N", 0.0, 0.0, 0.0));
     mol.atoms.push(Atom::new(2, "H", 0.0, 0.0, 0.0));
     mol.atoms.push(Atom::new(3, "C", 0.0, 0.0, 0.0));
+    for atom in &mut mol.atoms {
+        atom.no_implicit = true; // only check ordering, no implicit H
+    }
 
     assert_eq!(mol.formula(), "CHNO");
 }
@@ -593,6 +599,9 @@ fn test_formula_with_counts() {
     }
     for i in 6..12 {
         mol.atoms.push(Atom::new(i, "H", 0.0, 0.0, 0.0));
+    }
+    for atom in &mut mol.atoms {
+        atom.no_implicit = true;
     }
 
     assert_eq!(mol.formula(), "C6H6");
