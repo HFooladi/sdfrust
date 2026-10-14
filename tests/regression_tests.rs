@@ -759,3 +759,63 @@ fn ecfp_identifiers_match_rdkit_morgan() {
     };
     assert_eq!(fp.on_bits(), expected);
 }
+
+#[test]
+fn charged_atoms_use_isoelectronic_valences() {
+    use sdfrust::descriptors::valence::implicit_hydrogen_count;
+    // Boronate [B-2](C)(O)O from PDBbind 2vgc: B-2 is isoelectronic with N -> no H
+    let mut boronate = kekule(&["B", "C", "O", "O"], &[(0, 1, 1), (0, 2, 1), (0, 3, 1)]);
+    boronate.atoms[0].formal_charge = -2;
+    assert_eq!(implicit_hydrogen_count(&boronate, 0), 0);
+    // Sulfonium-like S+ with two bonds behaves like P: one H
+    let mut sulfonium = kekule(&["S", "C", "C"], &[(0, 1, 1), (0, 2, 1)]);
+    sulfonium.atoms[0].formal_charge = 1;
+    assert_eq!(implicit_hydrogen_count(&sulfonium, 0), 1);
+}
+
+#[test]
+fn protonated_nitrogen_and_sulfoxide_can_be_stereocenters() {
+    use sdfrust::descriptors::chirality::{ChiralTag, all_chiralities};
+    // Methyl ethyl propyl ammonium (N+ with H), tetrahedral 3D geometry
+    let mut ammonium = Molecule::new("ammonium");
+    for (i, (e, x, y, z)) in [
+        ("N", 0.0, 0.0, 0.0),
+        ("C", 1.0, 1.0, 1.0),
+        ("C", -1.0, -1.0, 1.0),
+        ("C", -1.0, 1.0, -1.0),
+        ("H", 0.6, -0.6, -0.6),
+        ("C", 2.0, 1.0, 1.0),
+        ("C", -2.0, -1.0, 1.0),
+        ("C", -3.0, -1.0, 1.0),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        ammonium.atoms.push(Atom::new(i, e, x, y, z));
+    }
+    ammonium.atoms[0].formal_charge = 1;
+    for (a, b) in [(0, 1), (0, 2), (0, 3), (0, 4), (1, 5), (2, 6), (6, 7)] {
+        ammonium.bonds.push(Bond::new(a, b, BondOrder::Single));
+    }
+    assert_ne!(all_chiralities(&ammonium)[0], ChiralTag::Unspecified);
+
+    // Methyl ethyl sulfoxide: S with =O, CH3, CH2CH3 and a lone pair
+    let mut sulfoxide = Molecule::new("sulfoxide");
+    for (i, (e, x, y, z)) in [
+        ("S", 0.0, 0.0, 0.0),
+        ("O", 0.0, 0.0, 1.5),
+        ("C", 1.5, 0.0, -0.5),
+        ("C", -0.8, 1.3, -0.5),
+        ("C", -0.8, 2.6, 0.2),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        sulfoxide.atoms.push(Atom::new(i, e, x, y, z));
+    }
+    sulfoxide.bonds.push(Bond::new(0, 1, BondOrder::Double));
+    sulfoxide.bonds.push(Bond::new(0, 2, BondOrder::Single));
+    sulfoxide.bonds.push(Bond::new(0, 3, BondOrder::Single));
+    sulfoxide.bonds.push(Bond::new(3, 4, BondOrder::Single));
+    assert_ne!(all_chiralities(&sulfoxide)[0], ChiralTag::Unspecified);
+}

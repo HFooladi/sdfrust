@@ -267,8 +267,8 @@ fn is_potential_stereocenter(
 
     let elem = normalize_element(&mol.atoms[idx].element);
 
-    // Skip nitrogen (invertible pyramidal, not stereocenter in ML context)
-    if elem == "N" {
+    // Neutral nitrogen inverts; only quaternary/protonated N+ is a center
+    if elem == "N" && mol.atoms[idx].formal_charge != 1 {
         return false;
     }
 
@@ -288,7 +288,10 @@ fn is_potential_stereocenter(
     let impl_h = implicit_hydrogen_count(mol, idx);
     let total = explicit + impl_h as usize;
 
-    if total != 4 {
+    // Sulfoxides/sulfonium (S, Se with three substituents) use their lone
+    // pair as the fourth
+    let lone_pair_center = total == 3 && matches!(elem.as_str(), "S" | "Se");
+    if total != 4 && !lone_pair_center {
         return false;
     }
 
@@ -297,8 +300,8 @@ fn is_potential_stereocenter(
         return false;
     }
 
-    // Allow: C, S, P, Se, Si, Ge
-    matches!(elem.as_str(), "C" | "S" | "P" | "Se" | "Si" | "Ge")
+    // Allow: C, N+, S, P, Se, Si, Ge
+    matches!(elem.as_str(), "C" | "N" | "S" | "P" | "Se" | "Si" | "Ge")
 }
 
 // ============================================================
@@ -530,10 +533,18 @@ pub fn all_chiralities(mol: &Molecule) -> Vec<ChiralTag> {
             let priority = compute_cip_priority(mol, &adj, i, neighbor);
             sub_priorities.push((priority, neighbor));
         }
-        // Add implicit H (lowest possible priority)
+        // Add implicit H (lowest real priority) and, for sulfoxide-like
+        // centers, the lone pair (lower still); both go last, as in RDKit
+        let lone_pairs = usize::from(explicit_neighbors.len() + impl_h as usize == 3);
         for _ in 0..impl_h {
             let priority = CipPriority {
                 layers: vec![vec![1]],
+            };
+            sub_priorities.push((priority, usize::MAX));
+        }
+        for _ in 0..lone_pairs {
+            let priority = CipPriority {
+                layers: vec![vec![0]],
             };
             sub_priorities.push((priority, usize::MAX));
         }
@@ -564,7 +575,7 @@ pub fn all_chiralities(mol: &Molecule) -> Vec<ChiralTag> {
         // Build ordered neighbor list: explicit (bond order) + implicit H last
         let ordered_neighbors: Vec<usize> = {
             let mut v: Vec<usize> = explicit_neighbors.clone();
-            for _ in 0..impl_h {
+            for _ in 0..impl_h as usize + lone_pairs {
                 v.push(usize::MAX);
             }
             v

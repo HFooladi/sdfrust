@@ -34,9 +34,11 @@ CDK2 ligands, heavy-atom-only and explicit-H; 113k atoms) with
   mass of ions. Formulas use RDKit's style: C, H, then alphabetical, with a
   charge suffix (`C2H3O2-`). A molecule built from atoms without bonds now
   gets implicit H on every atom; add the bonds, or set `Atom::no_implicit`.
-- Implicit hydrogens follow RDKit's valence model: allowed valences are
-  shifted by the formal charge (B⁻ like C, C⁺ like C⁻). Radicals and the
-  molfile valence field are honoured.
+- Implicit hydrogens follow RDKit's valence model: a charged atom takes the
+  valences of its isoelectronic neutral element (N⁺ like C, B⁻² like N).
+  Radicals and the molfile valence field are honoured.
+- Protonated/quaternary N⁺ and sulfoxide/sulfonium S can be tetrahedral
+  stereocenters (the lone pair counts as the fourth substituent).
 - Aromaticity uses per-atom π-electron counts and fused-ring unions (RDKit's
   model). Kekulé naphthalene, indole, azulene, purines, pyridones and
   tropylium are recognized; sulfoxide rings are not.
@@ -57,6 +59,15 @@ CDK2 ligands, heavy-atom-only and explicit-H; 113k atoms) with
 - OGB bond stereo is perceived from coordinates: Z = 1, E = 2, unknown = 5.
 - The element table covers all 118 elements, with isotope masses. MOL2 and
   XYZ atoms are flagged `no_implicit`.
+
+Also checked on 2,000 PDBbind 2024 ligands (3D, explicit H; 123k atoms):
+every property agrees with RDKit at ≥99.9%. All 27,670 PDBbind 2024 ligand
+files still parse.
+- The only ECFP or formal-charge differences are two N-oxides that RDKit
+  rewrites while sanitizing (N=O becomes [n+][O-]); sdfrust keeps the charges
+  as written in the file.
+- 0.08% of chiral tags differ, on RDKit's ring-stereo centers (dependent
+  stereocenters across rings), which aren't perceived yet.
 
 ### Added
 

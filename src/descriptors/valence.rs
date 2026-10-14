@@ -25,14 +25,14 @@
 //! assert_eq!(valence::implicit_hydrogen_count(&mol, 0), 0); // all H explicit
 //! ```
 
-use crate::descriptors::elements::get_element;
+use crate::descriptors::elements::{element_by_atomic_number, get_element};
 use crate::graph::{AdjacencyList, is_hydrogen};
 use crate::molecule::Molecule;
 
 /// Allowed valences for an element with the given formal charge, following
-/// RDKit's model: the neutral valence list shifted by the charge. For early
-/// elements (fewer than 4 outer electrons, e.g. B) the shift is reversed, and
-/// positively charged carbon is treated like a carbanion (both have valence 3).
+/// RDKit: a charged main-group atom uses the valences of the isoelectronic
+/// neutral element (atomic number minus charge). Otherwise the neutral list is
+/// shifted by the charge (reversed for early elements).
 ///
 /// Returns `None` for unknown elements and `Some(&[])`-like empty results for
 /// elements that take any valence (metals), which get no implicit hydrogens.
@@ -40,6 +40,18 @@ fn allowed_valences(element: &str, charge: i8) -> Option<Vec<i32>> {
     let data = get_element(element)?;
     if data.atomic_number == 1 && charge != 0 {
         return Some(vec![0]); // H+ / H- carry no further hydrogens
+    }
+    // A charged main-group atom takes the valences of its isoelectronic
+    // neutral element (N+ like C, O- like F, B- like C, B-2 like N, C+ like B)
+    if charge != 0 && !data.valences.is_empty() {
+        let iso = data.atomic_number as i32 - charge as i32;
+        if let Some(iso) = u8::try_from(iso)
+            .ok()
+            .and_then(element_by_atomic_number)
+            .filter(|e| !e.valences.is_empty())
+        {
+            return Some(iso.valences.iter().map(|&v| v as i32).collect());
+        }
     }
     let mut shift = charge as i32;
     if data.outer_electrons < 4 || (data.atomic_number == 6 && charge > 0) {
