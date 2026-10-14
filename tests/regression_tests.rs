@@ -413,3 +413,156 @@ fn masses_and_formula_include_implicit_h_isotopes_and_charge() {
     // Uranium is now a known element
     assert!(heavy("U", 0).molecular_weight().is_some());
 }
+
+// ---------------------------------------------------------------------------
+// Phase 2: aromaticity on Kekulé input (RDKit's results as reference)
+// ---------------------------------------------------------------------------
+
+/// Builds a molecule from element symbols and (atom1, atom2, order) bonds.
+fn kekule(elements: &[&str], bonds: &[(usize, usize, u8)]) -> Molecule {
+    let mut mol = Molecule::new("k");
+    for (i, e) in elements.iter().enumerate() {
+        mol.atoms.push(Atom::new(i, e, 0.0, 0.0, 0.0));
+    }
+    for &(a, b, order) in bonds {
+        let order = match order {
+            1 => BondOrder::Single,
+            2 => BondOrder::Double,
+            _ => BondOrder::Triple,
+        };
+        mol.bonds.push(Bond::new(a, b, order));
+    }
+    mol
+}
+
+fn aromatic_atoms(mol: &Molecule) -> Vec<bool> {
+    sdfrust::descriptors::all_aromatic_atoms(mol)
+}
+
+#[test]
+fn kekule_naphthalene_with_single_fusion_bond_is_fully_aromatic() {
+    // C4a(4)=C5 and C8a(9)=C8: the fusion bond 4-9 is single
+    let mol = kekule(
+        &["C"; 10],
+        &[
+            (0, 1, 2),
+            (1, 2, 1),
+            (2, 3, 2),
+            (3, 4, 1),
+            (4, 9, 1),
+            (9, 0, 1),
+            (4, 5, 2),
+            (5, 6, 1),
+            (6, 7, 2),
+            (7, 8, 1),
+            (8, 9, 2),
+        ],
+    );
+    assert!(aromatic_atoms(&mol).iter().all(|&a| a));
+}
+
+#[test]
+fn azulene_is_aromatic_through_the_fused_union() {
+    let mol = kekule(
+        &["C"; 10],
+        &[
+            (0, 1, 2),
+            (1, 2, 1),
+            (2, 3, 2),
+            (3, 4, 1),
+            (4, 0, 1),
+            (4, 5, 2),
+            (5, 6, 1),
+            (6, 7, 2),
+            (7, 8, 1),
+            (8, 9, 2),
+            (9, 3, 1),
+        ],
+    );
+    assert!(aromatic_atoms(&mol).iter().all(|&a| a));
+}
+
+#[test]
+fn charged_and_exocyclic_rings() {
+    // Tropylium: three C=C plus an empty p orbital on C+
+    let mut tropylium = kekule(
+        &["C"; 7],
+        &[
+            (0, 1, 2),
+            (1, 2, 1),
+            (2, 3, 2),
+            (3, 4, 1),
+            (4, 5, 2),
+            (5, 6, 1),
+            (6, 0, 1),
+        ],
+    );
+    tropylium.atoms[6].formal_charge = 1;
+    assert!(aromatic_atoms(&tropylium).iter().all(|&a| a));
+
+    // 2-Pyridone: the C=O carbon contributes an empty orbital
+    let pyridone = kekule(
+        &["N", "C", "C", "C", "C", "C", "O"],
+        &[
+            (0, 1, 1),
+            (1, 2, 1),
+            (2, 3, 2),
+            (3, 4, 1),
+            (4, 5, 2),
+            (5, 0, 1),
+            (1, 6, 2),
+        ],
+    );
+    assert!(aromatic_atoms(&pyridone)[..6].iter().all(|&a| a));
+
+    // Thiophene S-oxide is not aromatic
+    let s_oxide = kekule(
+        &["S", "C", "C", "C", "C", "O"],
+        &[
+            (0, 1, 1),
+            (1, 2, 2),
+            (2, 3, 1),
+            (3, 4, 2),
+            (4, 0, 1),
+            (0, 5, 2),
+        ],
+    );
+    assert!(aromatic_atoms(&s_oxide).iter().all(|&a| !a));
+
+    // Cyclohexa-1,3-diene is not aromatic
+    let diene = kekule(
+        &["C"; 6],
+        &[
+            (0, 1, 2),
+            (1, 2, 1),
+            (2, 3, 2),
+            (3, 4, 1),
+            (4, 5, 1),
+            (5, 0, 1),
+        ],
+    );
+    assert!(aromatic_atoms(&diene).iter().all(|&a| !a));
+}
+
+#[test]
+fn azulene_fusion_bond_is_not_aromatic() {
+    let mol = kekule(
+        &["C"; 10],
+        &[
+            (0, 1, 2),
+            (1, 2, 1),
+            (2, 3, 2),
+            (3, 4, 1),
+            (4, 0, 1),
+            (4, 5, 2),
+            (5, 6, 1),
+            (6, 7, 2),
+            (7, 8, 1),
+            (8, 9, 2),
+            (9, 3, 1),
+        ],
+    );
+    let bonds = sdfrust::descriptors::all_aromatic_bonds(&mol);
+    assert!(!bonds[3], "fusion bond 3-4");
+    assert_eq!(bonds.iter().filter(|&&b| b).count(), 10);
+}
