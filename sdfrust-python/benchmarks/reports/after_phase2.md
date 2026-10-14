@@ -1,4 +1,4 @@
-# sdfrust comparison: phase2_gast
+# sdfrust comparison: after_phase2
 
 Files: 140 · RDKit 2025.09.5 · OpenBabel: True · ogb: True
 
@@ -43,8 +43,10 @@ Files: 140 · RDKit 2025.09.5 · OpenBabel: True · ogb: True
 | desc.formula | 4553 | 4553 | 100.0 |  |  |
 | desc.molecular_weight | 4553 | 4553 | 100.0 |  |  |
 | desc.ring_count | 4553 | 4553 | 100.0 |  |  |
-| desc.rotatable_bonds | 3094 | 4553 | 68.0 |  |  |
-| desc.sssr_sizes | 4545 | 4553 | 99.8 |  |  |
+| desc.rotatable_bonds | 4553 | 4553 | 100.0 |  |  |
+| desc.sssr_sizes | 4553 | 4553 | 100.0 |  |  |
+| ecfp.morgan_bits_r2 | 4553 | 4553 | 100.0 |  |  |
+| ecfp.morgan_bits_r3 | 4553 | 4553 | 100.0 |  |  |
 | ogb.atom.aromatic | 113318 | 113318 | 100.0 |  |  |
 | ogb.atom.atomic_num | 113318 | 113318 | 100.0 |  |  |
 | ogb.atom.chirality | 113288 | 113318 | 100.0 |  |  |
@@ -56,7 +58,7 @@ Files: 140 · RDKit 2025.09.5 · OpenBabel: True · ogb: True
 | ogb.atom.radical_e | 113318 | 113318 | 100.0 |  |  |
 | ogb.bond.bond_type | 115958 | 115958 | 100.0 |  |  |
 | ogb.bond.conjugated | 115950 | 115958 | 100.0 |  |  |
-| ogb.bond.stereo | 115315 | 115958 | 99.4 |  |  |
+| ogb.bond.stereo | 115958 | 115958 | 100.0 |  |  |
 | openbabel.formula | 128 | 135 | 94.8 |  |  |
 | openbabel.molecular_weight | 135 | 135 | 100.0 | 0.0025 | 0.012 |
 | parse.atom_count | 4553 | 4553 | 100.0 |  |  |
@@ -71,7 +73,7 @@ Files: 140 · RDKit 2025.09.5 · OpenBabel: True · ogb: True
 | roundtrip.isotopes | 4553 | 4553 | 100.0 |  |  |
 | roundtrip.radicals | 4553 | 4553 | 100.0 |  |  |
 
-ECFP pairwise-similarity Spearman vs RDKit Morgan (r=2, 2048): **0.912** over 79800 pairs
+ECFP pairwise-similarity Spearman vs RDKit Morgan (r=2, 2048): **1.0** over 79800 pairs
 
 ## Largest numeric errors
 
@@ -119,26 +121,6 @@ ECFP pairwise-similarity Spearman vs RDKit Morgan (r=2, 2048): **0.912** over 79
 - `v3000_benzene.sdf#0 atom 5`: sdfrust=`-0.0623` reference=`0.0`
 - `v3000_charged.sdf#0 atom 0`: sdfrust=`-0.3689` reference=`0.377`
 
-### desc.rotatable_bonds
-- `acetaminophen.sdf#0`: sdfrust=`2` reference=`1`
-- `aspirin.sdf#0`: sdfrust=`3` reference=`2`
-- `drug_library.sdf#3`: sdfrust=`3` reference=`2`
-- `drug_library.sdf#5`: sdfrust=`2` reference=`1`
-- `atorvastatin__h.sdf#0`: sdfrust=`13` reference=`12`
-- `atorvastatin__noh.sdf#0`: sdfrust=`13` reference=`12`
-- `benzonitrile__h.sdf#0`: sdfrust=`1` reference=`0`
-- `benzonitrile__noh.sdf#0`: sdfrust=`1` reference=`0`
-
-### desc.sssr_sizes
-- `first_5K__noh.sdf#862`: sdfrust=`[5, 6, 6, 6, 9]` reference=`[5, 6, 6, 6, 6]`
-- `first_5K__noh.sdf#863`: sdfrust=`[5, 6, 6, 6, 9]` reference=`[5, 6, 6, 6, 6]`
-- `first_5K__noh.sdf#864`: sdfrust=`[5, 6, 6, 6, 9]` reference=`[5, 6, 6, 6, 6]`
-- `first_5K__noh.sdf#1377`: sdfrust=`[5, 5, 9]` reference=`[5, 5, 6]`
-- `first_5K__h.sdf#862`: sdfrust=`[5, 6, 6, 6, 9]` reference=`[5, 6, 6, 6, 6]`
-- `first_5K__h.sdf#863`: sdfrust=`[5, 6, 6, 6, 9]` reference=`[5, 6, 6, 6, 6]`
-- `first_5K__h.sdf#864`: sdfrust=`[5, 6, 6, 6, 9]` reference=`[5, 6, 6, 6, 6]`
-- `first_5K__h.sdf#1377`: sdfrust=`[5, 5, 9]` reference=`[5, 5, 6]`
-
 ### ogb.atom.chirality
 - `adamantane__h.sdf#0 atom 1 C`: sdfrust=`0` reference=`2`
 - `adamantane__h.sdf#0 atom 3 C`: sdfrust=`0` reference=`2`
@@ -164,16 +146,6 @@ ECFP pairwise-similarity Spearman vs RDKit Morgan (r=2, 2048): **0.912** over 79
 - `first_5K__h.sdf#729 bond 3`: sdfrust=`1` reference=`0`
 - `first_5K__h.sdf#729 bond 8`: sdfrust=`1` reference=`0`
 - `first_5K__h.sdf#729 bond 9`: sdfrust=`1` reference=`0`
-
-### ogb.bond.stereo
-- `e_2_butene__h.sdf#0 bond 1`: sdfrust=`0` reference=`2`
-- `e_2_butene__noh.sdf#0 bond 1`: sdfrust=`0` reference=`2`
-- `z_2_butene__h.sdf#0 bond 1`: sdfrust=`0` reference=`1`
-- `z_2_butene__noh.sdf#0 bond 1`: sdfrust=`0` reference=`1`
-- `first_5K__noh.sdf#8 bond 1`: sdfrust=`0` reference=`5`
-- `first_5K__noh.sdf#8 bond 5`: sdfrust=`0` reference=`5`
-- `first_5K__noh.sdf#22 bond 7`: sdfrust=`0` reference=`5`
-- `first_5K__noh.sdf#29 bond 1`: sdfrust=`0` reference=`5`
 
 ### openbabel.formula
 - `v3000_benzene.sdf#0`: sdfrust=`C6H6` reference=`C6`

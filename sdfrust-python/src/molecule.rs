@@ -826,8 +826,8 @@ impl PyMolecule {
 
     /// Get the chirality tag for an atom (CIP-based perception).
     ///
-    /// Uses CIP priority rules and signed volume to determine R/S configuration.
-    /// Returns "Unspecified" for non-stereocenters, "CW" for R, "CCW" for S.
+    /// Detects stereocenters and returns RDKit-style chiral tags: "CW" or
+    /// "CCW" (relative to bond order, not CIP R/S), or "Unspecified".
     ///
     /// Args:
     ///     atom_index: The atom index.

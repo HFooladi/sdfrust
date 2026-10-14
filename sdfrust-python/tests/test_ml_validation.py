@@ -340,6 +340,15 @@ class TestOGBBondFeatures:
 class TestECFPFingerprints:
     """Validate ECFP fingerprints against RDKit Morgan fingerprints."""
 
+    def test_bits_identical_to_rdkit_morgan(self, molecule_pair):
+        """sdfrust ECFP bits equal RDKit Morgan bits (default options)."""
+        from rdkit.Chem import rdFingerprintGenerator
+        name, sdf_mol, rdkit_mol = molecule_pair
+        for radius in (2, 3):
+            gen = rdFingerprintGenerator.GetMorganGenerator(radius=radius, fpSize=2048)
+            ref = list(gen.GetFingerprint(rdkit_mol).GetOnBits())
+            assert sorted(sdf_mol.ecfp_on_bits(radius, 2048)) == ref, f"{name} r={radius}"
+
     def test_ecfp_nonzero(self, molecule_pair):
         """Both implementations should produce non-empty fingerprints."""
         name, sdf_mol, rdkit_mol = molecule_pair

@@ -1,8 +1,13 @@
 //! CIP chirality perception for tetrahedral stereocenters.
 //!
-//! Determines chirality tags (CW/CCW) using CIP priority assignment
-//! via BFS expansion, and R/S determination from 3D signed volume
-//! or 2D wedge/dash bond information. Provides OGB atom feature 1.
+//! Detects tetrahedral stereocenters (four substituents with distinct
+//! CIP-style ranks) and assigns RDKit-style chirality tags (CW/CCW) from the
+//! 3D signed volume or 2D wedge/dash bonds. Provides OGB atom feature 1.
+//!
+//! Note: CW/CCW are *not* R/S. Like RDKit's `ChiralType`, the tag describes
+//! the order of the atom's bonds as listed in the molecule (looking from the
+//! first neighbour, the others run clockwise or counterclockwise), so it
+//! depends on atom/bond ordering, while R/S depends on CIP priorities.
 //!
 //! # Example
 //!
@@ -45,9 +50,11 @@ const VOLUME_THRESHOLD: f64 = 0.01;
 pub enum ChiralTag {
     /// No chirality specified or not a stereocenter.
     Unspecified,
-    /// Clockwise (R configuration).
+    /// Neighbours (in bond order) run clockwise viewed from the first one.
+    /// This is RDKit's `CHI_TETRAHEDRAL_CW`, not the CIP label R.
     CW,
-    /// Counterclockwise (S configuration).
+    /// Neighbours (in bond order) run counterclockwise viewed from the first
+    /// one. This is RDKit's `CHI_TETRAHEDRAL_CCW`, not the CIP label S.
     CCW,
     /// Other chirality type.
     Other,
@@ -57,8 +64,8 @@ impl ChiralTag {
     /// Returns the OGB-compatible integer index.
     ///
     /// - 0 = Unspecified
-    /// - 1 = CW (R)
-    /// - 2 = CCW (S)
+    /// - 1 = CW
+    /// - 2 = CCW
     /// - 3 = Other
     pub fn to_ogb_index(&self) -> u8 {
         match self {
@@ -439,8 +446,9 @@ fn signed_volume(subs: &[(f64, f64, f64); 4], center: &(f64, f64, f64)) -> f64 {
 
 /// Determine the chirality of atom `idx`.
 ///
-/// Uses CIP priority assignment and signed volume to detect
-/// R/S configuration. Returns `Unspecified` for non-stereocenters.
+/// Uses CIP-style ranking to detect stereocenters and the signed volume of
+/// the neighbours (in bond order) to assign CW/CCW, matching RDKit's chiral
+/// tags. Returns `Unspecified` for non-stereocenters.
 ///
 /// # Example
 ///
@@ -645,7 +653,7 @@ mod tests {
     #[test]
     fn test_chiral_3d_r() {
         // C with F, Cl, Br, H in 3D → R configuration
-        // Arrange so signed volume is negative → CW (R)
+        // Arrange so signed volume is negative → CW
         let mut mol = Molecule::new("r_chiral");
         mol.atoms.push(Atom::new(0, "C", 0.0, 0.0, 0.0));
         mol.atoms.push(Atom::new(1, "Br", -1.0, -1.0, 1.0));

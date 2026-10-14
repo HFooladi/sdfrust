@@ -393,6 +393,15 @@ def compare_molecule(t: Tally, path: Path, idx: int, ours, rd, ob, raw=None):
 
         _safe(t, "ogb.atom", ctx, ogb)
 
+    # ECFP vs RDKit Morgan: bits should be identical on the same graph
+    def ecfp_bits():
+        for radius in (2, 3):
+            gen = rdFingerprintGenerator.GetMorganGenerator(radius=radius, fpSize=2048)
+            t.check(f"ecfp.morgan_bits_r{radius}", sorted(ours.ecfp_on_bits(radius, 2048)),
+                    list(gen.GetFingerprint(rd).GetOnBits()), ctx)
+
+    _safe(t, "ecfp.morgan_bits_r2", ctx, ecfp_bits)
+
     # Round trip: sdfrust writer -> RDKit reader
     def roundtrip():
         block = sdfrust.write_sdf_auto_string(ours)

@@ -7,6 +7,73 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - Unreleased
+
+Chemistry correctness release. Every perceived property was compared against
+RDKit 2025.09 and the `ogb` package on 4,553 molecules (NCI first 5k, EGFR and
+CDK2 ligands, heavy-atom-only and explicit-H; 113k atoms) with
+`compare_tools.py --rdkit-data`. Agreement before → after:
+
+| Feature | 0.7.0 | 0.8.0 |
+|---|---|---|
+| Molecular weight / exact mass / formula | 54% | 100% |
+| Aromatic atoms / bonds | 97.8% / 97.2% | 100% / 100% |
+| Hybridization | 98.8% | >99.99% |
+| Conjugated bonds | 98.4% | >99.99% |
+| Gasteiger charges | 46% | 100% |
+| Rotatable bonds | 68% | 100% |
+| SSSR ring sizes | 99.8% | 100% |
+| OGB bond stereo | 99.4% | 100% |
+| ECFP bits identical to RDKit Morgan | ~0% | 100% |
+
+### Changed (breaking: values change for the same input)
+
+- `molecular_weight`, `exact_mass` and `Molecule::formula` count implicit
+  hydrogens, so heavy-atom-only files give the full molecule. They also use
+  isotope masses for labelled atoms, and exact mass corrects for the electron
+  mass of ions. Formulas use RDKit's style: C, H, then alphabetical, with a
+  charge suffix (`C2H3O2-`). A molecule built from atoms without bonds now
+  gets implicit H on every atom; add the bonds, or set `Atom::no_implicit`.
+- Implicit hydrogens follow RDKit's valence model: allowed valences are
+  shifted by the formal charge (B⁻ like C, C⁺ like C⁻). Radicals and the
+  molfile valence field are honoured.
+- Aromaticity uses per-atom π-electron counts and fused-ring unions (RDKit's
+  model). Kekulé naphthalene, indole, azulene, purines, pyridones and
+  tropylium are recognized; sulfoxide rings are not.
+- Hybridization comes from σ bonds plus lone pairs, and conjugation follows
+  RDKit's rules. `atom_hybridization` and `all_hybridizations` now agree.
+- Gasteiger charges are a port of RDKit's implementation: same parameter
+  table, 12 iterations, implicit H as virtual atoms, H χ⁺ = 20.02, and formal
+  charge split over conjugated atoms. Atoms without parameters keep their
+  formal charge.
+- `rotatable_bond_count` uses RDKit's default (strict) definition, which
+  excludes amide/ester C–X bonds, CF3/CCl3/CBr3, tert-butyl and bonds next
+  to triple bonds. Aspirin now has 2 rotatable bonds, not 3.
+- `sssr` returns a true minimum cycle basis (Horton) with deterministic order.
+- ECFP/Morgan fingerprints are bit-identical to RDKit's
+  `GetMorganGenerator(radius, fpSize)` with default options.
+- Chiral tags (CW/CCW) are relative to bond order, as in RDKit. Their docs no
+  longer call them R/S.
+- OGB bond stereo is perceived from coordinates: Z = 1, E = 2, unknown = 5.
+- The element table covers all 118 elements, with isotope masses. MOL2 and
+  XYZ atoms are flagged `no_implicit`.
+
+### Added
+
+- `descriptors::stereo::double_bond_stereo`: E/Z from coordinates.
+- `gasteiger_charges_with_hydrogens`: also returns implicit-H charges.
+- `element_by_atomic_number`, `isotope_mass`; `ElementData::outer_electrons`
+  and `ElementData::valences`.
+- `Atom::no_implicit`, also exposed in Python.
+- `scripts/gen_element_table.py`, which regenerates the periodic table from RDKit.
+- `compare_tools.py --rdkit-data/--smiles/--extra` for larger corpora, and
+  exact ECFP bit comparison.
+
+### Fixed
+
+- The V2000 parser and writer handle stereo code 3 ("cis/trans unknown") on
+  double bonds.
+
 ## [0.7.0] - Unreleased
 
 Correctness release. Every change below was found by a differential comparison
