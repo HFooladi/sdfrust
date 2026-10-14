@@ -716,3 +716,46 @@ fn rotatable_bonds_follow_rdkit_strict_definition() {
     // Butane: one rotatable bond whether hydrogens are explicit or implicit
     assert_eq!(rotatable_bond_count(&carbon_chain(4)), 1);
 }
+
+#[test]
+fn ecfp_identifiers_match_rdkit_morgan() {
+    use sdfrust::fingerprints::ecfp::{ecfp, ecfp_counts};
+    // RDKit 2025.09: GetMorganGenerator(radius=r).GetSparseCountFingerprint
+    let ethanol = kekule(&["C", "C", "O"], &[(0, 1, 1), (1, 2, 1)]);
+    let mut ids: Vec<u32> = ecfp_counts(&ethanol, 1).counts.into_keys().collect();
+    ids.sort_unstable();
+    assert_eq!(
+        ids,
+        vec![
+            864662311, 1535166686, 2245384272, 2246728737, 3542456614, 4018048386
+        ]
+    );
+
+    // Kekulé benzene gives the same identifiers as RDKit's aromatic benzene
+    let benzene = kekule(
+        &["C"; 6],
+        &[
+            (0, 1, 2),
+            (1, 2, 1),
+            (2, 3, 2),
+            (3, 4, 1),
+            (4, 5, 2),
+            (5, 0, 1),
+        ],
+    );
+    let mut ids: Vec<u32> = ecfp_counts(&benzene, 2).counts.into_keys().collect();
+    ids.sort_unstable();
+    assert_eq!(ids, vec![98513984, 2763854213, 3218693969]);
+
+    // Folding is identifier % n_bits, as in RDKit
+    let fp = ecfp(&benzene, 2, 2048);
+    let expected: Vec<usize> = {
+        let mut v: Vec<usize> = [98513984u32, 2763854213, 3218693969]
+            .iter()
+            .map(|&i| i as usize % 2048)
+            .collect();
+        v.sort_unstable();
+        v
+    };
+    assert_eq!(fp.on_bits(), expected);
+}

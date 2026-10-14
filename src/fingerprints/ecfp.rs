@@ -1,11 +1,18 @@
 //! Extended Connectivity Fingerprints (ECFP) / Morgan fingerprints.
 //!
-//! Implements the Rogers & Hahn (2010) algorithm:
-//! 1. Assign initial atom invariants (hash of atomic number, degree, etc.)
-//! 2. Iteratively collect neighbor information at increasing radii
-//! 3. Fold to a fixed-length bit vector
+//! Implements the Rogers & Hahn (2010) algorithm exactly as RDKit's Morgan
+//! fingerprint generator does, so identifiers and folded bits are **identical
+//! to RDKit** (`rdFingerprintGenerator.GetMorganGenerator(radius, fpSize)`
+//! with default options) for the same molecular graph:
+//! 1. Atom invariants: hash of atomic number, total degree, total H count,
+//!    formal charge, isotope mass shift and ring membership
+//! 2. Each layer hashes the layer index, the atom's identifier and its sorted
+//!    (bond type, neighbour identifier) pairs; environments covering the same
+//!    bonds as an earlier one are dropped
+//! 3. Identifiers are folded into the bit vector modulo its length
 //!
-//! This is a pure graph algorithm — no SMILES dependency required.
+//! Aromaticity is perceived first, so Kekulé and aromatic inputs give the
+//! same fingerprint. As in RDKit, explicit hydrogen atoms are part of the graph.
 //!
 //! # Example
 //!
@@ -26,7 +33,9 @@
 //! ```
 
 use crate::bond::BondOrder;
-use crate::descriptors::elements::get_element;
+use crate::descriptors::aromaticity::all_aromatic_bonds;
+use crate::descriptors::elements::{element_by_atomic_number, get_element, isotope_mass};
+use crate::descriptors::topological::ring_atoms;
 use crate::descriptors::valence;
 use crate::graph::AdjacencyList;
 use crate::molecule::Molecule;
@@ -114,8 +123,8 @@ pub struct EcfpCountFingerprint {
 /// * `n_bits` - Length of the folded bit vector (typically 1024 or 2048).
 ///   `0` yields an empty fingerprint.
 ///
-/// Note: bits are not compatible with RDKit's Morgan fingerprints (different
-/// atom invariants and hash function); compare fingerprints only with each other.
+/// Bits are identical to RDKit's Morgan fingerprint with default options
+/// (`GetMorganGenerator(radius=radius, fpSize=n_bits).GetFingerprint(mol)`).
 ///
 /// # Example
 ///
@@ -135,7 +144,7 @@ pub fn ecfp(mol: &Molecule, radius: usize, n_bits: usize) -> EcfpFingerprint {
     // Fold to bit vector (n_bits == 0 yields an empty fingerprint)
     let mut bits = vec![false; n_bits];
     if n_bits > 0 {
-        for &id in identifiers.values().flatten() {
+        for &id in &identifiers {
             bits[(id as usize) % n_bits] = true;
         }
     }
@@ -150,7 +159,8 @@ pub fn ecfp(mol: &Molecule, radius: usize, n_bits: usize) -> EcfpFingerprint {
 /// Compute an ECFP count fingerprint (hash → count).
 ///
 /// Returns unfolded feature identifiers with counts, useful for
-/// count-based similarity metrics or feature importance analysis.
+/// count-based similarity metrics or feature importance analysis. Identical
+/// to RDKit's `GetSparseCountFingerprint` from a default Morgan generator.
 ///
 /// # Arguments
 ///
@@ -160,108 +170,165 @@ pub fn ecfp_counts(mol: &Molecule, radius: usize) -> EcfpCountFingerprint {
     let identifiers = compute_ecfp_identifiers(mol, radius);
 
     let mut counts: HashMap<u32, u32> = HashMap::new();
-    for &id in identifiers.values().flatten() {
+    for &id in &identifiers {
         *counts.entry(id).or_insert(0) += 1;
     }
 
     EcfpCountFingerprint { counts, radius }
 }
 
-/// Core ECFP algorithm: compute identifiers for each atom at each radius.
-fn compute_ecfp_identifiers(mol: &Molecule, radius: usize) -> HashMap<usize, Vec<u32>> {
+/// Boost's `hash_combine` on a 32-bit seed, as used by RDKit's fingerprints.
+fn hash_combine(seed: u32, value: u32) -> u32 {
+    seed ^ value
+        .wrapping_add(0x9e37_79b9)
+        .wrapping_add(seed << 6)
+        .wrapping_add(seed >> 2)
+}
+
+/// Boost's 64-bit `hash_combine` (used for `std::pair` and vector hashes).
+fn hash_combine64(seed: u64, value: u64) -> u64 {
+    seed ^ value
+        .wrapping_add(0x9e37_79b9)
+        .wrapping_add(seed << 6)
+        .wrapping_add(seed >> 2)
+}
+
+/// RDKit bond type codes used as bond invariants.
+fn bond_invariant(order: BondOrder, aromatic: bool) -> u32 {
+    if aromatic {
+        return 12;
+    }
+    match order {
+        BondOrder::Single => 1,
+        BondOrder::Double => 2,
+        BondOrder::Triple => 3,
+        BondOrder::Aromatic => 12,
+        BondOrder::Hydrogen => 14,
+        BondOrder::Coordination => 17,
+        _ => 0,
+    }
+}
+
+/// RDKit's connectivity invariants for every atom.
+fn atom_invariants(mol: &Molecule, adj: &AdjacencyList) -> Vec<u32> {
+    let implicit_h = valence::all_implicit_hydrogen_counts(mol);
+    let in_ring = ring_atoms(mol);
+    let atomic_number =
+        |i: usize| get_element(&mol.atoms[i].element).map_or(0, |e| e.atomic_number);
+
+    (0..mol.atom_count())
+        .map(|i| {
+            let atom = &mol.atoms[i];
+            let element = get_element(&atom.element);
+            let z = atomic_number(i);
+            let h_neighbors = adj
+                .neighbor_atoms(i)
+                .into_iter()
+                .filter(|&j| atomic_number(j) == 1)
+                .count();
+            let total_hs = implicit_h[i] as u32 + h_neighbors as u32;
+            let total_degree = adj.degree(i) as u32 + implicit_h[i] as u32;
+            // Mass shift for isotopes, truncated like C++'s static_cast<int>
+            let delta_mass = element.map_or(0, |e| {
+                let standard = element_by_atomic_number(e.atomic_number)
+                    .map_or(e.atomic_weight, |s| s.atomic_weight);
+                let mass = match atom.isotope {
+                    Some(a) => isotope_mass(e.atomic_number, a).unwrap_or(a as f64),
+                    None => e.atomic_weight, // D and T carry their isotope mass
+                };
+                (mass - standard) as i32
+            });
+            let mut components = vec![
+                z as u32,
+                total_degree,
+                total_hs,
+                atom.formal_charge as i32 as u32,
+                delta_mass as u32,
+            ];
+            if in_ring[i] {
+                components.push(1);
+            }
+            components.into_iter().fold(0u32, hash_combine)
+        })
+        .collect()
+}
+
+/// Core ECFP algorithm: the identifiers of every included environment
+/// (layer 0 atoms plus each new, non-duplicate environment per layer).
+fn compute_ecfp_identifiers(mol: &Molecule, radius: usize) -> Vec<u32> {
     let n = mol.atom_count();
     if n == 0 {
-        return HashMap::new();
+        return Vec::new();
     }
 
     let adj = AdjacencyList::from_molecule(mol);
+    let aromatic = all_aromatic_bonds(mol);
+    let bond_inv: Vec<u32> = mol
+        .bonds
+        .iter()
+        .enumerate()
+        .map(|(b, bond)| bond_invariant(bond.order, aromatic[b]))
+        .collect();
 
-    // Step 1: Initial atom invariants
-    let mut identifiers: Vec<u32> = (0..n).map(|i| initial_atom_invariant(mol, i)).collect();
+    let mut current = atom_invariants(mol, &adj);
+    let mut identifiers = current.clone();
 
-    // Collect all identifiers per atom
-    let mut all_identifiers: HashMap<usize, Vec<u32>> = HashMap::new();
-    for (i, &id) in identifiers.iter().enumerate() {
-        all_identifiers.entry(i).or_default().push(id);
-    }
+    // Bond sets covered by each atom's current environment
+    let words = mol.bond_count().div_ceil(64).max(1);
+    let mut neighborhoods = vec![vec![0u64; words]; n];
+    let mut seen: std::collections::HashSet<Vec<u64>> = std::collections::HashSet::new();
+    let mut dead = vec![false; n];
 
-    // Step 2: Iterative neighbor collection
-    for _r in 0..radius {
-        let mut new_identifiers = vec![0u32; n];
+    for layer in 0..radius {
+        let mut next = current.clone();
+        let mut next_neighborhoods = neighborhoods.clone();
+        let mut round: Vec<(Vec<u64>, u32, usize)> = Vec::new();
 
         for i in 0..n {
-            let mut neighbor_info: Vec<(u32, u32)> = Vec::new();
-
-            for &(neighbor, bond_idx) in adj.neighbors(i) {
-                let bond_invariant = bond_type_hash(mol, bond_idx);
-                neighbor_info.push((bond_invariant, identifiers[neighbor]));
+            if dead[i] {
+                continue;
             }
-
-            // Sort for canonical ordering
-            neighbor_info.sort();
-
-            // Hash: combine current identifier with sorted neighbor info
-            let mut hash = identifiers[i];
-            for (bond_inv, atom_inv) in &neighbor_info {
-                hash = hash_combine(hash, *bond_inv);
-                hash = hash_combine(hash, *atom_inv);
+            if adj.degree(i) == 0 {
+                dead[i] = true;
+                continue;
             }
-
-            new_identifiers[i] = hash;
-            all_identifiers.entry(i).or_default().push(hash);
+            let mut env = neighborhoods[i].clone();
+            let mut pairs: Vec<(u32, u32)> = Vec::with_capacity(adj.degree(i));
+            for &(j, b) in adj.neighbors(i) {
+                for (w, nw) in env.iter_mut().zip(&neighborhoods[j]) {
+                    *w |= nw;
+                }
+                env[b / 64] |= 1 << (b % 64);
+                pairs.push((bond_inv[b], current[j]));
+            }
+            pairs.sort_unstable();
+            let mut id = hash_combine(layer as u32, current[i]);
+            for (bt, nid) in pairs {
+                // std::pair is hashed with Boost's 64-bit combine, then folded in
+                let pair_hash = hash_combine64(hash_combine64(0, bt as u64), nid as u64);
+                id = hash_combine(id, pair_hash as u32);
+            }
+            next[i] = id;
+            next_neighborhoods[i] = env.clone();
+            round.push((env, id, i));
         }
 
-        identifiers = new_identifiers;
+        // Equal environments: keep the smallest identifier, drop the rest
+        round.sort();
+        for (env, id, i) in round {
+            if seen.contains(&env) {
+                dead[i] = true;
+            } else {
+                identifiers.push(id);
+                seen.insert(env);
+            }
+        }
+
+        current = next;
+        neighborhoods = next_neighborhoods;
     }
 
-    all_identifiers
-}
-
-/// Compute initial atom invariant hash.
-///
-/// Based on Rogers & Hahn (2010): hash of atomic number, degree,
-/// number of Hs, formal charge, ring membership.
-fn initial_atom_invariant(mol: &Molecule, idx: usize) -> u32 {
-    let atom = &mol.atoms[idx];
-    let adj = AdjacencyList::from_molecule(mol);
-
-    let atomic_num = get_element(&atom.element)
-        .map(|e| e.atomic_number as u32)
-        .unwrap_or(0);
-    let degree = adj.degree(idx) as u32;
-    let num_hs = valence::total_hydrogen_count(mol, idx) as u32;
-    let charge = (atom.formal_charge as i32 + 5) as u32; // shift to positive
-    let is_ring = if mol.is_atom_in_ring(idx) { 1u32 } else { 0 };
-
-    let mut hash = atomic_num;
-    hash = hash_combine(hash, degree);
-    hash = hash_combine(hash, num_hs);
-    hash = hash_combine(hash, charge);
-    hash = hash_combine(hash, is_ring);
-
-    hash
-}
-
-/// Hash for bond type.
-fn bond_type_hash(mol: &Molecule, bond_idx: usize) -> u32 {
-    match mol.bonds.get(bond_idx) {
-        Some(bond) => match bond.order {
-            BondOrder::Single => 1,
-            BondOrder::Double => 2,
-            BondOrder::Triple => 3,
-            BondOrder::Aromatic => 4,
-            _ => 0,
-        },
-        None => 0,
-    }
-}
-
-/// Combine two hash values (FNV-1a inspired).
-fn hash_combine(h: u32, val: u32) -> u32 {
-    let mut hash = h;
-    hash ^= val;
-    hash = hash.wrapping_mul(16777619);
-    hash
+    identifiers
 }
 
 #[cfg(test)]
